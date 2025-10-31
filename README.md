@@ -23,6 +23,55 @@ The software translates natural language queries to SQL, runs them read-only on 
 - **Read-only User:** Oracle DB user with only SELECT privileges.  
 - **Audit Trail:** Logs of queries and user metadata for compliance.
 
+### 1.5 Flow diagram
+
+┌─────────────────────────────────────────────────────────────┐
+│                     Executive/UI Layer                       │
+│                  (Web Browser, API Client)                  │
+└────────────────────────────┬────────────────────────────────┘
+                             ↓
+        ┌────────────────────────────────────────┐
+        │      FastAPI Backend                   │
+        │  ├─ Query Routing                      │
+        │  ├─ Request Validation (Pydantic)      │
+        │  └─ Response Formatting                │
+        └──┬──────────────────────────────────┬──┘
+           ↓                                  ↓
+    ┌────────────────────┐          ┌──────────────────┐
+    │   Gemini API       │          │  SQL Validator   │
+    │   (NL → SQL)       │          │  (Safety Checks) │
+    │                    │          │  - No INSERT     │
+    │ Rate: 15 RPM       │          │  - No DELETE     │
+    │ Free Tier          │          │  - No DROP       │
+    └────────────────────┘          └──────────────────┘
+           ↓
+    ┌────────────────────────────────────────┐
+    │   Schema Manager                       │
+    │   ├─ Cache (in-memory)                 │
+    │   ├─ Semantic retrieval                │
+    │   └─ Only send relevant tables to LLM  │
+    └────────────────────────────────────────┘
+           ↓
+    ┌────────────────────────────────────────┐
+    │   Oracle Database Layer                │
+    │   ├─ Connection Pool (5-20 conns)      │
+    │   ├─ Query Execution                   │
+    │   └─ Result Fetching                   │
+    └────────────────────────────────────────┘
+           ↓
+    ┌────────────────────────────────────────┐
+    │   Report Generation                    │
+    │   ├─ ReportLab (PDF creation)          │
+    │   ├─ Format results                    │
+    │   └─ Add metadata (query, timestamp)   │
+    └────────────────────────────────────────┘
+           ↓
+    ┌────────────────────────────────────────┐
+    │   PDF + Audit Trail to Executive       │
+    └────────────────────────────────────────┘
+
+
+
 ## 2. Overall Description
 
 ### 2.1 Product Perspective  
