@@ -1,6 +1,6 @@
-#AI Report Generator
+# AI Report Generator
 
-##Software Requirements Specification (SRS)
+## Software Requirements Specification (SRS)
 
 ## 1. Introduction
 
