@@ -50,7 +50,8 @@ The software translates natural language queries to SQL, runs them read-only on 
     │   Schema Manager + Schema Selector     │
     │   ├─ Cache (in-memory)                 │
     │   ├─ Semantic retrieval                │
-    │   └─ Only send relevant tables to LLM  │
+    │   └─ Only send relevant tables to LLM  |
+    │   -Gemini API                          |
     └────────────────────────────────────────┘
            ↓
     ┌────────────────────────────────────────┐
