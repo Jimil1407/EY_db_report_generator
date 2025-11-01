@@ -36,15 +36,16 @@ The software translates natural language queries to SQL, runs them read-only on 
         │  ├─ Request Validation (Pydantic)      │
         │  └─ Response Formatting                │
         └──┬──────────────────────────────────┬──┘
-           ↓                                  ↓
-    ┌────────────────────┐          ┌──────────────────┐
-    │   Gemini API       │          │  SQL Validator   │
-    │   (NL → SQL)       │          │  (Safety Checks) │
-    │                    │          │  - No INSERT     │
-    │ Rate: 15 RPM       │          │  - No DELETE     │
-    │ Free Tier          │          │  - No DROP       │
-    └────────────────────┘          └──────────────────┘
-           ↓
+                              |                
+    ┌────────────────────┐    |     ┌──────────────────┐
+    │   Gemini API       │    |     │  SQL Validator   │
+    │   (NL → SQL)       │    |     │  (Safety Checks) │
+    │                    │    |     │  - No INSERT     │
+    │ Rate: 15 RPM       │    |     │  - No DELETE     │
+    │ Free Tier          │    |     │  - No DROP       │
+    └────────────────────┘    |     └──────────────────┘
+           ^                  |
+           |                  V
     ┌────────────────────────────────────────┐
     │   Schema Manager                       │
     │   ├─ Cache (in-memory)                 │
