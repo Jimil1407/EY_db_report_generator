@@ -47,7 +47,7 @@ The software translates natural language queries to SQL, runs them read-only on 
            ^                  |
            |                  V
     ┌────────────────────────────────────────┐
-    │   Schema Manager                       │
+    │   Schema Manager + Schema Selector     │
     │   ├─ Cache (in-memory)                 │
     │   ├─ Semantic retrieval                │
     │   └─ Only send relevant tables to LLM  │
