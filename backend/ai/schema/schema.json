@@ -1,0 +1,38 @@
+{
+  "claims": [
+    "claim_id",
+    "patient_id",
+    "hospital_id",
+    "claim_date",
+    "status",
+    "amount",
+    "diagnosis_code"
+  ],
+  "hospitals": [
+    "hospital_id",
+    "hospital_name",
+    "location",
+    "hospital_type"
+  ],
+  "patients": [
+    "patient_id",
+    "first_name",
+    "last_name",
+    "date_of_birth",
+    "gender"
+  ],
+  "approvals": [
+    "approval_id",
+    "claim_id",
+    "approval_status",
+    "approval_date",
+    "approved_amount"
+  ],
+  "payments": [
+    "payment_id",
+    "claim_id",
+    "payment_date",
+    "payment_amount",
+    "payment_method"
+  ]
+}
