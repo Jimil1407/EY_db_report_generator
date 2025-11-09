@@ -25,7 +25,7 @@ API Endpoints Testing Commands:
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import logging
 import os
 import re
@@ -89,14 +89,16 @@ few_shots = [
 
 # Request/Response Models
 class GenerateSQLRequest(BaseModel):
-    user_name: str
-    user_email: str
-    query: str
-
+    name: str = Field(...)
+    user_name: str = Field(...)
+    user_email: str = Field(...)
+    query: str = Field(...)
+    
 
 class GenerateSQLResponse(BaseModel):
-    sql_query: str
-    status: str
+    name:str = Field(...)
+    sql_query: str = Field(...)
+    status: str = Field(...)
 
 
 # SQL Validation
