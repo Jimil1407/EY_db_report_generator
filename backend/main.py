@@ -74,10 +74,14 @@ app.add_middleware(
 # Few-shot examples for SQL generation
 few_shots = [
     {
+        "user_name": "John Doe",
+        "user_email": "john.doe@example.com",
         "q": "How many claims are pending?",
         "a": "SELECT COUNT(*) FROM claims WHERE status = 'PENDING';",
     },
     {
+        "user_name": "Jane Smith",
+        "user_email": "jane.smith@example.com",
         "q": "Show approved claims in last month.",
         "a": (
             "SELECT * FROM claims "
@@ -89,14 +93,14 @@ few_shots = [
 
 # Request/Response Models
 class GenerateSQLRequest(BaseModel):
-    name: str = Field(...)
     user_name: str = Field(...)
     user_email: str = Field(...)
     query: str = Field(...)
     
 
 class GenerateSQLResponse(BaseModel):
-    name:str = Field(...)
+    user_name:str = Field(...)
+    user_email:str = Field(...)
     sql_query: str = Field(...)
     status: str = Field(...)
 
@@ -189,6 +193,8 @@ async def generate_sql(request: GenerateSQLRequest):
         logger.info(f"[API] generate-sql: Successfully generated SQL with user_email {request.user_email}")
         
         return GenerateSQLResponse(
+            user_name=request.user_name,
+            user_email=request.user_email,
             sql_query=generated_sql,
             status="success"
         )
