@@ -1,0 +1,28 @@
+# Python environment and packages
+.env
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.env/
+
+# Environment variables
+.env
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# Log files
+*.log
+
+# Build artifacts
+dist/
+build/
+
+# Generated files
+*.pyc
+
+# Other files to ignore
+node_modules/
