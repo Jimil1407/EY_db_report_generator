@@ -117,8 +117,8 @@ def validate_sql(sql: str) -> tuple:
     sql_upper = sql.strip().upper()
     
     # Check if it starts with SELECT
-    if not sql_upper.startswith("SELECT"):
-        return False, "Only SELECT queries are allowed"
+    # if not sql_upper.startswith("SELECT"):
+    #     return False, "Only SELECT queries are allowed"
     
     # List of dangerous keywords that should not be present
     dangerous_keywords = [
@@ -162,7 +162,7 @@ async def generate_sql(request: GenerateSQLRequest):
         logger.info(f"[API] generate-sql: Processing query '{request.query}' with user_email {request.user_email}")
         
         # Import here to avoid circular imports
-        from backend.ai.sql_generator import SQLGenerator
+        from ai.sql_generator import SQLGenerator
         
         # Use the API key loaded at startup
         current_api_key = os.getenv("GEMINI_API_KEY") # Using os.getenv again
