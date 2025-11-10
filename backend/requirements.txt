@@ -1,3 +1,5 @@
 fastapi==0.115.0
 google-generativeai==0.5.0
 python-dotenv==1.0.0
+pydantic
+uvicorn==0.30.1

@@ -1,0 +1,15 @@
+!.env       # Environment variables
+!.env.example # Environment variables example
+!.env.local # Environment variables local
+!.env.development # Environment variables development
+!.env.production # Environment variables production
+!.env.test # Environment variables test
+!.env.staging # Environment variables staging
+!.env.development.local # Environment variables development local
+!.env.production.local # Environment variables production local
+!.env.test.local # Environment variables test local
+!.env.staging.local # Environment variables staging local
+!.env.development.local.example # Environment variables development local example
+!.env.production.local.example # Environment variables production local example
+!.env.test.local.example # Environment variables test local example
+!.env.staging.local.example # Environment variables staging local example
