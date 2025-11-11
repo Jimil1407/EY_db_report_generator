@@ -29,6 +29,7 @@ from pydantic import BaseModel, Field
 import logging
 import os
 import re
+import sys
 from typing import Optional
 import traceback
 from pathlib import Path
@@ -44,6 +45,11 @@ logger = logging.getLogger(__name__)
 # Load API key from .env.local file
 env_path = Path(__file__).parent / ".env.local"
 logger.info(f"Looking for .env.local file at: {env_path}")
+
+# Ensure project root is on sys.path for flexible imports
+project_root = Path(__file__).resolve().parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 if env_path.exists():
     logger.info(f".env.local file found at {env_path}")
@@ -161,8 +167,11 @@ async def generate_sql(request: GenerateSQLRequest):
     try:
         logger.info(f"[API] generate-sql: Processing query '{request.query}' with user_email {request.user_email}")
         
-        # Import here to avoid circular imports
-        from ai.sql_generator import SQLGenerator
+        # Import here to avoid circular imports; support both package and script runs
+        try:
+            from .ai.sql_generator import SQLGenerator  # when run as package: backend.main
+        except ImportError:
+            from backend.ai.sql_generator import SQLGenerator  # when run with absolute path
         
         # Use the API key loaded at startup
         current_api_key = os.getenv("GEMINI_API_KEY") # Using os.getenv again

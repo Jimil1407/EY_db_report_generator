@@ -17,10 +17,35 @@ def load_schema(schema_path: str = None):
 
 def format_schema(schema_json: dict) -> str:
     lines = []
-    table_name = schema_json.get("tableName", "UNKNOWN_TABLE")
-    columns_data = schema_json.get("columns", [])
-    
-    column_names = [col.get("name", "UNKNOWN_COLUMN") for col in columns_data]
-    cols_str = ", ".join(column_names)
-    lines.append(f"TABLE: {table_name} ({cols_str})")
+    # Support two shapes:
+    # 1) {"tableName": "T", "columns": [{"name": "COL", "type": "..."} , ...]}
+    # 2) {"TABLE_A": ["COL1", "COL2"], "TABLE_B": [{"name": "COL1"}, "COL2", ...]}
+    if isinstance(schema_json, dict) and "tableName" in schema_json and "columns" in schema_json:
+        table_name = schema_json.get("tableName")
+        raw_columns = schema_json.get("columns", [])
+        column_names = []
+        for col in raw_columns:
+            if isinstance(col, dict):
+                name = col.get("name")
+                if name:
+                    column_names.append(name)
+            elif isinstance(col, str):
+                column_names.append(col)
+        cols_str = ", ".join(column_names)
+        lines.append(f"TABLE: {table_name} ({cols_str})")
+        return "\n".join(lines)
+
+    # Fallback: treat schema_json as mapping of table -> columns
+    for table, columns in schema_json.items():
+        column_names = []
+        if isinstance(columns, list):
+            for col in columns:
+                if isinstance(col, dict):
+                    name = col.get("name")
+                    if name:
+                        column_names.append(name)
+                elif isinstance(col, str):
+                    column_names.append(col)
+        cols_str = ", ".join(column_names)
+        lines.append(f"TABLE: {table} ({cols_str})")
     return "\n".join(lines)

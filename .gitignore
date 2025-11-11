@@ -9,6 +9,27 @@ venv/
 
 # Environment variables
 .env
+.env.local
+# Recursive env files in any subdir (backend/, frontend/, etc.)
+**/.env
+**/.env.local
+**/*.env
+**/*.env.local
+# Explicitly ignore backend env file location
+backend/.env.local
+frontend/.env.local
+
+# macOS
+.DS_Store
+
+# Python caches and tooling
+*.py[cod]
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
 
 # IDE and editor files
 .vscode/
