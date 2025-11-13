@@ -1,6 +1,6 @@
 from dotenv import load_dotenv
 import os
-import cx_Oracle
+import oracledb
 from contextlib import contextmanager
 from typing import List, Dict, Any, Optional, Tuple
 import logging
@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 def get_db_connection():
     """
     Create and return a database connection.
-    Returns a cx_Oracle connection object.
+    Returns an oracledb connection object.
     
     Supports both JDBC URL format and separate host/port/service format.
     JDBC URL format: jdbc:oracle:thin:@host:port:service or jdbc:oracle:thin:@host:port/service
@@ -111,13 +111,13 @@ def get_db_connection():
         # Log connection attempt (without sensitive data)
         logger.info(f"Attempting to connect to Oracle database at {final_host}:{final_port}/{final_service} as user {username}")
         
-        dsn = cx_Oracle.makedsn(final_host, final_port, service_name=final_service)
+        dsn = oracledb.makedsn(final_host, final_port, service_name=final_service)
         logger.debug(f"DSN created: {dsn}")
         
-        connection = cx_Oracle.connect(username, password, dsn)
+        connection = oracledb.connect(user=username, password=password, dsn=dsn)
         logger.info("Database connection established successfully")
         return connection
-    except cx_Oracle.DatabaseError as e:
+    except oracledb.DatabaseError as e:
         error_msg = f"Database connection failed: {str(e)}"
         logger.error(error_msg)
         logger.error(f"Connection details - Host: {final_host}, Port: {final_port}, Service: {final_service}, User: {username}")
@@ -237,7 +237,7 @@ def execute_query(sql_query: str, max_rows: Optional[int] = None) -> Tuple[List[
             logger.info(f"Query executed successfully. Returned {len(results)} rows.")
             return results, columns, None
             
-    except cx_Oracle.DatabaseError as e:
+    except oracledb.DatabaseError as e:
         error_msg = f"Database error: {str(e)}"
         logger.error(f"Query execution failed: {error_msg}")
         return [], [], error_msg
@@ -304,7 +304,7 @@ def execute_query_with_count(sql_query: str) -> Tuple[List[Dict[str, Any]], List
             logger.info(f"Query executed successfully. Returned {total_count} rows.")
             return results, columns, total_count, None
             
-    except cx_Oracle.DatabaseError as e:
+    except oracledb.DatabaseError as e:
         error_msg = f"Database error: {str(e)}"
         logger.error(f"Query execution failed: {error_msg}")
         return [], [], 0, error_msg
@@ -322,5 +322,5 @@ if __name__ == "__main__":
             result = cursor.fetchone()
             print("Connection successful!")
             print("Sample query result:", result)
-    except cx_Oracle.DatabaseError as e:
+    except oracledb.DatabaseError as e:
         print("Database connection or query failed:", e)
