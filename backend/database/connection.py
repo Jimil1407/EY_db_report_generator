@@ -1,38 +1,37 @@
-import oracledb
-from fastapi import FastAPI
-from .config import settings
+from dotenv import load_dotenv
+import os
+import cx_Oracle
+from urllib.parse import urlparse
 
-class OracleConnectionPool:
-    def __init__(self):
-        self.pool = None
+load_dotenv()  # Load environment variables from .env file
 
-    async def init_pool(self):
-        self.pool = oracledb.create_pool(
-            user=settings.ORACLE_USER,
-            password=settings.ORACLE_PASSWORD,
-            dsn=f"{settings.ORACLE_HOST}:{settings.ORACLE_PORT}/{settings.ORACLE_DB_NAME}",
-            min=5,
-            max=20,
-            increment=1,
-            encoding="UTF-8",
-            pool_timeout=60
-        )
+jdbc_url = os.getenv("ORACLE_JDBC_URL")
+username = os.getenv("ORACLE_USER")
+password = os.getenv("ORACLE_PASSWORD")
+port = os.getenv("PORT")
+service_name = os.getenv("SERVICE")
 
-    async def get_connection(self):
-        return await self.pool.acquire()
+#print(jdbc_url, username, password)
 
-    async def close_pool(self):
-        if self.pool:
-            await self.pool.close()
+dsn = cx_Oracle.makedsn(jdbc_url, port, service_name=service_name)
 
-# Dependency injection for FastAPI lifecycle
-oracle_pool = OracleConnectionPool()
+#print(dsn)
+try:
+    # Connect to the database
+    connection = cx_Oracle.connect(username, password, dsn)
+    print("Connection successful!")
 
-def init_db(app: FastAPI):
-    @app.on_event("startup")
-    async def startup_event():
-        await oracle_pool.init_pool()
+    # Create a cursor
+    cursor = connection.cursor()
 
-    @app.on_event("shutdown")
-    async def shutdown_event():
-        await oracle_pool.close_pool()
+    # Run a sample query, replace 'your_table' with a real table name
+    cursor.execute("SELECT * FROM ASRIT_PATIENT WHERE ROWNUM = 1")
+    result = cursor.fetchone()
+    print("Sample query result:", result)
+
+except cx_Oracle.DatabaseError as e:
+    print("Database connection or query failed:", e)
+
+finally:
+    if 'connection' in locals():
+        connection.close()
