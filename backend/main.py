@@ -1,65 +1,40 @@
 """
-API Endpoints Testing Commands:
-
-1. Health Check (GET):
-   curl -X GET http://localhost:8000/health
-
-2. Generate SQL (POST):
-   curl -X POST http://localhost:8000/generate-sql \
-     -H "Content-Type: application/json" \
-     -d '{
-       "user_name": "John Doe",
-       "user_email": "john.doe@example.com",
-       "query": "How many claims are pending?"
-     }'
-
-   Example with complex query:
-   curl -X POST http://localhost:8000/generate-sql \
-     -H "Content-Type: application/json" \
-     -d '{
-       "user_name": "Jane Smith",
-       "user_email": "jane.smith@example.com",
-       "query": "Show me all approved claims from last month with their amounts"
-     }'
+Main FastAPI application entry point.
 """
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
 import logging
-import os
-import re
 import sys
-from typing import Optional
-import traceback
 from pathlib import Path
-from dotenv import load_dotenv # Re-enabling dotenv import
 
-# Configure logging
+# Configure logging first
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Load API key from .env.local file
-env_path = Path(__file__).parent / ".env.local"
-logger.info(f"Looking for .env.local file at: {env_path}")
-
 # Ensure project root is on sys.path for flexible imports
 project_root = Path(__file__).resolve().parent.parent
 if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
-if env_path.exists():
-    logger.info(f".env.local file found at {env_path}")
-    load_dotenv(dotenv_path=env_path)
-    if os.getenv("GEMINI_API_KEY"):
-        logger.info(f"API key loaded from .env.local: {os.getenv('GEMINI_API_KEY')[:10]}...")
-    else:
-        logger.error("GEMINI_API_KEY not found in .env.local file")
-else:
-    logger.error(f".env.local file not found at {env_path}")
+# Ensure backend directory is on sys.path
+backend_path = Path(__file__).resolve().parent
+if str(backend_path) not in sys.path:
+    sys.path.insert(0, str(backend_path))
+
+# Handle both relative and absolute imports
+try:
+    from .config import load_environment
+    from .routes import health, query
+except ImportError:
+    # When running as script, use absolute imports
+    from config import load_environment
+    from routes import health, query
+
+# Load environment variables
+load_environment()
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -77,229 +52,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Few-shot examples for SQL generation
-few_shots = [
-    {
-        "user_name": "John Doe",
-        "user_email": "john.doe@example.com",
-        "q": "How many patients are there?",
-        "a": "SELECT COUNT(*) FROM ASRIT_PATIENT;",
-    },
-    {
-        "user_name": "Jane Smith",
-        "user_email": "jane.smith@example.com",
-        "q": "Show me all patient details for patients older than 18",
-        "a": "SELECT * FROM ASRIT_PATIENT WHERE AGE > 18;",
-    },
-    {
-        "user_name": "Bob Johnson",
-        "user_email": "bob.johnson@example.com",
-        "q": "Get patient ID and name for female patients",
-        "a": "SELECT PATIENT_ID, FIRST_NAME, MIDDLE_NAME, LAST_NAME FROM ASRIT_PATIENT WHERE GENDER = 'F';",
-    },
-]
-
-# Request/Response Models
-class GenerateSQLRequest(BaseModel):
-    user_name: str = Field(...)
-    user_email: str = Field(...)
-    query: str = Field(...)
-    
-
-class GenerateSQLResponse(BaseModel):
-    user_name:str = Field(...)
-    user_email:str = Field(...)
-    sql_query: str = Field(...)
-    status: str = Field(...)
-
-
-class ExecuteQueryRequest(BaseModel):
-    sql_query: str = Field(...)
-
-
-class ExecuteQueryResponse(BaseModel):
-    results: list = Field(...)
-    columns: list = Field(...)
-    row_count: int = Field(...)
-    error: Optional[str] = Field(None)
-    status: str = Field(...)
-
-
-# SQL Validation
-def validate_sql(sql: str) -> tuple:
-    """
-    Validate that SQL is read-only (SELECT-only).
-    Returns (is_valid, error_message)
-    """
-    if not sql or not sql.strip():
-        return False, "SQL query is empty"
-    
-    sql_upper = sql.strip().upper()
-    
-    # Check if it starts with SELECT
-    # if not sql_upper.startswith("SELECT"):
-    #     return False, "Only SELECT queries are allowed"
-    
-    # List of dangerous keywords that should not be present
-    dangerous_keywords = [
-        "INSERT", "UPDATE", "DELETE", "DROP", "TRUNCATE", 
-        "ALTER", "CREATE", "EXEC", "EXECUTE", "CALL",
-        "MERGE", "GRANT", "REVOKE", "COMMIT", "ROLLBACK"
-    ]
-    
-    for keyword in dangerous_keywords:
-        # Use word boundary to avoid false positives (e.g., "SELECT" in "SELECTION")
-        pattern = r'\b' + re.escape(keyword) + r'\b'
-        if re.search(pattern, sql_upper):
-            return False, f"Dangerous keyword '{keyword}' detected. Only SELECT queries are allowed"
-    
-    return True, None
-
-
-# Health Check Endpoint
-@app.get("/health")
-async def health_check():
-    """Health check endpoint"""
-    return {"status": "healthy", "service": "AI Report Generator"}
-
-
-# Generate SQL Endpoint
-@app.post("/generate-sql", response_model=GenerateSQLResponse)
-async def generate_sql(request: GenerateSQLRequest):
-    """
-    Generate SQL query from natural language query.
-    
-    Request body:
-    - user_name: Name of the user making the request
-    - user_email: Email of the user making the request
-    - query: Natural language query/question
-    
-    Response:
-    - sql_query: Generated SQL query
-    - status: Success or error status
-    """
-    try:
-        logger.info(f"[API] generate-sql: Processing query '{request.query}' with user_email {request.user_email}")
-        
-        # Import here to avoid circular imports; support both package and script runs
-        try:
-            from .ai.sql_generator import SQLGenerator  # when run as package: backend.main
-        except ImportError:
-            from backend.ai.sql_generator import SQLGenerator  # when run with absolute path
-        
-        # Use the API key loaded at startup
-        current_api_key = os.getenv("GEMINI_API_KEY") # Using os.getenv again
-        if not current_api_key:
-            logger.error("[API] GEMINI_API_KEY is not set in backend/.env.local file or environment")
-            raise HTTPException(
-                status_code=500,
-                detail="GEMINI_API_KEY is not configured in backend/.env.local file or environment"
-            )
-
-        # Initialize SQL Generator with API key
-        logger.info(f"[API] Initializing SQL Generator with API key: {current_api_key[:10]}...")
-        sql_generator = SQLGenerator(few_shots=few_shots, api_key=current_api_key)
-        
-        # Generate SQL using AI
-        generated_sql = sql_generator.generate_query(request.query)
-        
-        # Validate SQL is read-only
-        is_valid, error_message = validate_sql(generated_sql)
-        
-        if not is_valid:
-            logger.warning(f"[API] generate-sql: Validation failed - {error_message} with user_email {request.user_email}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"Generated SQL failed validation: {error_message}"
-            )
-        
-        logger.info(f"[API] generate-sql: Successfully generated SQL with user_email {request.user_email}")
-        
-        return GenerateSQLResponse(
-            user_name=request.user_name,
-            user_email=request.user_email,
-            sql_query=generated_sql,
-            status="success"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[API] generate-sql: Error - {str(e)} with user_email {request.user_email}")
-        logger.error(f"[API] generate-sql: Full traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
-
-
-# Execute Query Endpoint
-@app.post("/execute-query", response_model=ExecuteQueryResponse)
-async def execute_query(request: ExecuteQueryRequest):
-    """
-    Execute a SQL query and return results.
-    
-    Request body:
-    - sql_query: SQL query to execute
-    
-    Response:
-    - results: List of dictionaries containing query results
-    - columns: List of column names
-    - row_count: Number of rows returned
-    - error: Error message if execution failed
-    - status: Success or error status
-    """
-    try:
-        logger.info(f"[API] execute-query: Executing SQL query")
-        
-        # Validate SQL is read-only
-        is_valid, error_message = validate_sql(request.sql_query)
-        
-        if not is_valid:
-            logger.warning(f"[API] execute-query: Validation failed - {error_message}")
-            raise HTTPException(
-                status_code=400,
-                detail=f"SQL query failed validation: {error_message}"
-            )
-        
-        # Import query executor from connection module
-        try:
-            from .database.connection import execute_query_with_count
-        except ImportError:
-            from backend.database.connection import execute_query_with_count
-        
-        # Execute the query
-        results, columns, row_count, error = execute_query_with_count(request.sql_query)
-        
-        if error:
-            logger.error(f"[API] execute-query: Query execution failed - {error}")
-            return ExecuteQueryResponse(
-                results=[],
-                columns=[],
-                row_count=0,
-                error=error,
-                status="error"
-            )
-        
-        logger.info(f"[API] execute-query: Successfully executed query. Returned {row_count} rows.")
-        
-        return ExecuteQueryResponse(
-            results=results,
-            columns=columns,
-            row_count=row_count,
-            error=None,
-            status="success"
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"[API] execute-query: Error - {str(e)}")
-        logger.error(f"[API] execute-query: Full traceback: {traceback.format_exc()}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Internal server error: {str(e)}"
-        )
+# Register routers
+app.include_router(health.router)
+app.include_router(query.router)
 
 
 if __name__ == "__main__":

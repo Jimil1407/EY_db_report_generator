@@ -7,7 +7,7 @@ These prompts are designed to test the CSV download feature by generating querie
 ### 1. Patient Demographics (Basic Info)
 **Prompt:** "Show me all patient details including name, age, gender, address, and contact information for patients older than 18"
 
-**Expected:** Returns PATIENT_NAME, MIDDLE_NAME, LAST_NAME, AGE, GENDER, ADDRESS, ADDRESS2, MOBILE, EMAIL, STATE, DISTRICT_CODE, PIN_CODE
+**Expected:** Returns SELECT * or FIRST_NAME, MIDDLE_NAME, LAST_NAME, AGE, GENDER, ADDR1, ADDR2, ADDR3, CONTACT_NO, STATE, DISTRICT_CODE, PIN_CODE
 
 ---
 
@@ -19,44 +19,44 @@ These prompts are designed to test the CSV download feature by generating querie
 ---
 
 ### 3. Patient Registration Details
-**Prompt:** "Show me patient registration information including patient ID, name, registration number, hospital details, and card status for all patients"
+**Prompt:** "Show me patient registration information including patient ID, name, registration number, hospital details, and card information for all patients"
 
-**Expected:** Returns PATIENT_ID, PATIENT_NAME, REGISTRATION_NO, REG_CARD_NO, REG_HOSP_NO, REG_HOSP_ID, REG_HOSP_DATE, CARD_STATUS, and related fields
+**Expected:** Returns SELECT * or PATIENT_ID, FIRST_NAME, MIDDLE_NAME, LAST_NAME, PATIENT_IPOP_NO, REG_HOSP_ID, REG_HOSP_DATE, CARD_TYPE, CARD_ISSUE_DT, and related fields
 
 ---
 
 ### 4. Patient Card Information
-**Prompt:** "List all patients with their card issue dates, renewal dates, card status, and related card information"
+**Prompt:** "List all patients with their card issue dates, renewal information, card type, and related card details"
 
-**Expected:** Returns CARD_ISSUE_DATE, CARD_ISSUE_TYPE, CARD_ISSUE_REASON, CARD_RENEWAL_DATE, CARD_RENEWAL_REASON, CARD_STATUS, CARD_CANCEL_DATE, CARD_REPLACEMENT_DATE, etc.
+**Expected:** Returns SELECT * or CARD_ISSUE_DT, CARD_TYPE, RENEWAL, CARD_ATTACHMENT, JOURNALIST_RENEWAL, CMCO_RENEWAL, etc.
 
 ---
 
 ### 5. Patient Demographics with Location
 **Prompt:** "Show me patient names, ages, genders, addresses, state, district, pin code, caste, and occupation for all patients"
 
-**Expected:** Returns PATIENT_NAME, MIDDLE_NAME, LAST_NAME, AGE, GENDER, ADDRESS, ADDRESS2, STATE, DISTRICT_CODE, PIN_CODE, CASTE, OCCUPATION
+**Expected:** Returns SELECT * or FIRST_NAME, MIDDLE_NAME, LAST_NAME, AGE, GENDER, ADDR1, ADDR2, ADDR3, STATE, DISTRICT_CODE, PIN_CODE, CASTE, OCCUPATION_CD
 
 ---
 
 ### 6. Patient Contact and Personal Info
-**Prompt:** "Get me patient ID, full name, date of birth, age, gender, mobile number, email, and marital status for all patients"
+**Prompt:** "Get me patient ID, full name, date of birth, age, gender, contact number, and marital status for all patients"
 
-**Expected:** Returns PATIENT_ID, PATIENT_NAME, MIDDLE_NAME, LAST_NAME, DOB, AGE, GENDER, MOBILE, EMAIL, MARITAL_STATUS
+**Expected:** Returns SELECT * or PATIENT_ID, FIRST_NAME, MIDDLE_NAME, LAST_NAME, DATE_OF_BIRTH, AGE, GENDER, CONTACT_NO, MARITIAL_STATUS
 
 ---
 
 ### 7. Patient Registration and Card Details
-**Prompt:** "Show all patients with their registration numbers, card numbers, hospital registration details, card issue information, and card status"
+**Prompt:** "Show all patients with their registration information, card numbers, hospital registration details, card issue information, and card type"
 
-**Expected:** Returns REGISTRATION_NO, REG_CARD_NO, REG_HOSP_NO, REG_HOSP_ID, REG_HOSP_DATE, CARD_ISSUE_DATE, CARD_ISSUE_TYPE, CARD_STATUS, and related fields
+**Expected:** Returns SELECT * or PATIENT_IPOP_NO, REF_CARD_NO, REG_HOSP_ID, REG_HOSP_DATE, CARD_ISSUE_DT, CARD_TYPE, RENEWAL, and related fields
 
 ---
 
 ### 8. Patient with All Dates
-**Prompt:** "List patients with all their important dates including date of birth, registration date, card issue date, renewal date, and report date"
+**Prompt:** "List patients with all their important dates including date of birth, registration date, card issue date, and report date"
 
-**Expected:** Returns DOB, REG_HOSP_DATE, CARD_ISSUE_DATE, CARD_RENEWAL_DATE, REPORT_DATE, CARD_CANCEL_DATE, CARD_REPLACEMENT_DATE, SET_UPD_DT
+**Expected:** Returns SELECT * or DATE_OF_BIRTH, REG_HOSP_DATE, REG_HC_DATE, CARD_ISSUE_DT, REPORT_DATE, CRT_DT, LST_UPD_DT
 
 ---
 
@@ -68,9 +68,9 @@ These prompts are designed to test the CSV download feature by generating querie
 ---
 
 ### 10. Patient Demographics Extended
-**Prompt:** "Show me patient information including ID, name, age, gender, address, state, district, pin code, caste, occupation, marital status, mobile, email, and registration details"
+**Prompt:** "Show me patient information including ID, name, age, gender, address, state, district, pin code, caste, occupation, marital status, contact number, and registration details"
 
-**Expected:** Returns 15+ columns covering demographics and registration
+**Expected:** Returns SELECT * or 15+ columns: PATIENT_ID, FIRST_NAME, MIDDLE_NAME, LAST_NAME, AGE, GENDER, ADDR1, ADDR2, STATE, DISTRICT_CODE, PIN_CODE, CASTE, OCCUPATION_CD, MARITIAL_STATUS, CONTACT_NO, REG_HOSP_ID, etc.
 
 ---
 
@@ -84,16 +84,16 @@ These prompts are designed to test the CSV download feature by generating querie
 ---
 
 ### 12. Patients by Gender
-**Prompt:** "List all female patients with their name, age, and contact details"
+**Prompt:** "List all female patients with their name, age, and contact number"
 
-**Expected:** Should return many rows if there are female patients
+**Expected:** Should return many rows if there are female patients. Returns SELECT * or FIRST_NAME, MIDDLE_NAME, LAST_NAME, AGE, CONTACT_NO, GENDER
 
 ---
 
 ### 13. Patients with Cards Issued
 **Prompt:** "Show me all patients who have a card issue date, including their patient ID, name, and card details"
 
-**Expected:** Should return many rows if cards have been issued
+**Expected:** Should return many rows if cards have been issued. Returns SELECT * or PATIENT_ID, FIRST_NAME, CARD_ISSUE_DT, CARD_TYPE, etc.
 
 ---
 
@@ -142,9 +142,9 @@ These prompts are designed to test the CSV download feature by generating querie
 ---
 
 ### 20. Comprehensive Patient List
-**Prompt:** "List all patients with their ID, full name, age, gender, complete address, mobile, email, registration number, card number, card status, and all important dates"
+**Prompt:** "List all patients with their ID, full name, age, gender, complete address, contact number, registration information, card details, and all important dates"
 
-**Expected:** Returns 15+ columns and many rows
+**Expected:** Returns SELECT * or 15+ columns: PATIENT_ID, FIRST_NAME, MIDDLE_NAME, LAST_NAME, AGE, GENDER, ADDR1, ADDR2, ADDR3, CONTACT_NO, REG_HOSP_ID, REG_HOSP_DATE, CARD_TYPE, CARD_ISSUE_DT, DATE_OF_BIRTH, etc.
 
 ---
 
@@ -161,7 +161,21 @@ These prompts are designed to test the CSV download feature by generating querie
 ## Expected SQL Patterns
 
 Most of these prompts should generate SQL like:
-- `SELECT PATIENT_ID, PATIENT_NAME, AGE, GENDER, ... FROM ASRIT_PATIENT WHERE ...`
-- `SELECT * FROM ASRIT_PATIENT WHERE ...`
+- `SELECT * FROM ASRIT_PATIENT WHERE ...` (preferred for comprehensive queries)
+- `SELECT PATIENT_ID, FIRST_NAME, AGE, GENDER, ... FROM ASRIT_PATIENT WHERE ...` (for specific columns)
 - `SELECT [multiple columns] FROM ASRIT_PATIENT WHERE ... FETCH FIRST N ROWS ONLY`
+
+## Important Column Name Changes
+
+Note: The schema has been updated. Key column name changes:
+- `PATIENT_NAME` → `FIRST_NAME`
+- `ADDRESS`/`ADDRESS2` → `ADDR1`/`ADDR2`/`ADDR3`
+- `DOB` → `DATE_OF_BIRTH`
+- `MOBILE` → `CONTACT_NO` (integer type)
+- `EMAIL` → Removed (doesn't exist in database)
+- `MARITAL_STATUS` → `MARITIAL_STATUS` (note spelling)
+- `OCCUPATION` → `OCCUPATION_CD`
+- `CARD_ISSUE_DATE` → `CARD_ISSUE_DT`
+- `REGISTRATION_NO` → `PATIENT_IPOP_NO`
+- `REG_CARD_NO` → `REF_CARD_NO`
 

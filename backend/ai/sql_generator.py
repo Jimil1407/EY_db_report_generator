@@ -40,6 +40,11 @@ class SQLGenerator:
         # Sanitize: strip markdown fences, language tags, and leading labels
         sql = self._clean_sql_output(raw_output)
         
+        # Validate SQL completeness
+        completeness_error = self._validate_sql_completeness(sql)
+        if completeness_error:
+            raise ValueError(f"Generated SQL is incomplete: {completeness_error}")
+        
         # Validate that SQL only uses columns from schema
         validation_error = self._validate_sql_columns(sql)
         if validation_error:
@@ -47,6 +52,37 @@ class SQLGenerator:
         
         # Return SQL for further processing
         return sql
+    
+    def _validate_sql_completeness(self, sql: str) -> str:
+        """
+        Validate that the SQL query is complete and has all required components.
+        Returns error message if validation fails, None if valid.
+        """
+        if not sql or not sql.strip():
+            return "SQL query is empty"
+        
+        sql_upper = sql.strip().upper()
+        
+        # Must start with SELECT
+        if not sql_upper.startswith("SELECT"):
+            return "SQL query must start with SELECT"
+        
+        # Must contain FROM clause
+        if "FROM" not in sql_upper:
+            return "SQL query must include FROM clause with table name"
+        
+        # Must contain table name ASRIT_PATIENT
+        if "ASRIT_PATIENT" not in sql_upper:
+            return "SQL query must include FROM ASRIT_PATIENT"
+        
+        # Check for incomplete SELECT (e.g., "SELECT *;" without FROM)
+        select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql_upper, re.DOTALL)
+        if not select_match:
+            # Check if it's just "SELECT *;" or similar without FROM
+            if re.match(r'SELECT\s+\*?\s*;?\s*$', sql_upper):
+                return "SQL query is incomplete - missing FROM clause"
+        
+        return None
     
     def _validate_sql_columns(self, sql: str) -> str:
         """
