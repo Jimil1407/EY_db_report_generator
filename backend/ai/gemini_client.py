@@ -23,7 +23,7 @@ class GeminiClient:
             generation_config = {
                 "temperature": 0.3,
                 "top_p": 0.8,
-                "max_output_tokens": 500,
+                "max_output_tokens": 8192,  # Increased to allow longer queries without truncation
             }
             
             response = self.model.generate_content(

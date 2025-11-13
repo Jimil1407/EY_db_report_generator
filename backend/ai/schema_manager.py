@@ -24,15 +24,23 @@ def format_schema(schema_json: dict) -> str:
         table_name = schema_json.get("tableName")
         raw_columns = schema_json.get("columns", [])
         column_names = []
+        column_details = []
         for col in raw_columns:
             if isinstance(col, dict):
                 name = col.get("name")
+                col_type = col.get("type", "unknown")
                 if name:
                     column_names.append(name)
+                    column_details.append(f"  - {name} ({col_type})")
             elif isinstance(col, str):
                 column_names.append(col)
-        cols_str = ", ".join(column_names)
-        lines.append(f"TABLE: {table_name} ({cols_str})")
+                column_details.append(f"  - {col}")
+        
+        # Format with explicit column list
+        lines.append(f"TABLE: {table_name}")
+        lines.append(f"Available columns (USE ONLY THESE):")
+        lines.extend(column_details)
+        lines.append(f"\nColumn list: {', '.join(column_names)}")
         return "\n".join(lines)
 
     # Fallback: treat schema_json as mapping of table -> columns

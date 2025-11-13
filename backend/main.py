@@ -82,18 +82,20 @@ few_shots = [
     {
         "user_name": "John Doe",
         "user_email": "john.doe@example.com",
-        "q": "How many claims are pending?",
-        "a": "SELECT COUNT(*) FROM claims WHERE status = 'PENDING';",
+        "q": "How many patients are there?",
+        "a": "SELECT COUNT(*) FROM ASRIT_PATIENT;",
     },
     {
         "user_name": "Jane Smith",
         "user_email": "jane.smith@example.com",
-        "q": "Show approved claims in last month.",
-        "a": (
-            "SELECT * FROM claims "
-            "WHERE status = 'APPROVED' "
-            "AND claim_date >= TRUNC(ADD_MONTHS(SYSDATE, -1), 'MM');"
-        ),
+        "q": "Show me all patient details for patients older than 18",
+        "a": "SELECT * FROM ASRIT_PATIENT WHERE AGE > 18;",
+    },
+    {
+        "user_name": "Bob Johnson",
+        "user_email": "bob.johnson@example.com",
+        "q": "Get patient ID and name for female patients",
+        "a": "SELECT PATIENT_ID, FIRST_NAME, MIDDLE_NAME, LAST_NAME FROM ASRIT_PATIENT WHERE GENDER = 'F';",
     },
 ]
 
@@ -108,6 +110,18 @@ class GenerateSQLResponse(BaseModel):
     user_name:str = Field(...)
     user_email:str = Field(...)
     sql_query: str = Field(...)
+    status: str = Field(...)
+
+
+class ExecuteQueryRequest(BaseModel):
+    sql_query: str = Field(...)
+
+
+class ExecuteQueryResponse(BaseModel):
+    results: list = Field(...)
+    columns: list = Field(...)
+    row_count: int = Field(...)
+    error: Optional[str] = Field(None)
     status: str = Field(...)
 
 
@@ -213,6 +227,75 @@ async def generate_sql(request: GenerateSQLRequest):
     except Exception as e:
         logger.error(f"[API] generate-sql: Error - {str(e)} with user_email {request.user_email}")
         logger.error(f"[API] generate-sql: Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
+# Execute Query Endpoint
+@app.post("/execute-query", response_model=ExecuteQueryResponse)
+async def execute_query(request: ExecuteQueryRequest):
+    """
+    Execute a SQL query and return results.
+    
+    Request body:
+    - sql_query: SQL query to execute
+    
+    Response:
+    - results: List of dictionaries containing query results
+    - columns: List of column names
+    - row_count: Number of rows returned
+    - error: Error message if execution failed
+    - status: Success or error status
+    """
+    try:
+        logger.info(f"[API] execute-query: Executing SQL query")
+        
+        # Validate SQL is read-only
+        is_valid, error_message = validate_sql(request.sql_query)
+        
+        if not is_valid:
+            logger.warning(f"[API] execute-query: Validation failed - {error_message}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"SQL query failed validation: {error_message}"
+            )
+        
+        # Import query executor from connection module
+        try:
+            from .database.connection import execute_query_with_count
+        except ImportError:
+            from backend.database.connection import execute_query_with_count
+        
+        # Execute the query
+        results, columns, row_count, error = execute_query_with_count(request.sql_query)
+        
+        if error:
+            logger.error(f"[API] execute-query: Query execution failed - {error}")
+            return ExecuteQueryResponse(
+                results=[],
+                columns=[],
+                row_count=0,
+                error=error,
+                status="error"
+            )
+        
+        logger.info(f"[API] execute-query: Successfully executed query. Returned {row_count} rows.")
+        
+        return ExecuteQueryResponse(
+            results=results,
+            columns=columns,
+            row_count=row_count,
+            error=None,
+            status="success"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[API] execute-query: Error - {str(e)}")
+        logger.error(f"[API] execute-query: Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"
