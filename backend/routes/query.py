@@ -116,6 +116,7 @@ async def generate_sql(request: GenerateSQLRequest):
             user_name=request.user_name,
             user_email=request.user_email,
             sql_query=generated_sql,
+            selected_tables=selected_tables,
             status="success"
         )
         

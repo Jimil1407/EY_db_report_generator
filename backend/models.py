@@ -15,6 +15,7 @@ class GenerateSQLResponse(BaseModel):
     user_name: str = Field(...)
     user_email: str = Field(...)
     sql_query: str = Field(...)
+    selected_tables: list = Field(default_factory=list)  # List of selected table names
     status: str = Field(...)
 
 

@@ -6,23 +6,31 @@ from typing import List, Dict, Any, Optional, Tuple
 import logging
 from pathlib import Path
 
-# Try to load .env file from multiple locations
-env_files = [
-    Path(__file__).parent.parent / ".env",  # backend/.env
-    Path(__file__).parent.parent / ".env.local",  # backend/.env.local
-    Path(__file__).parent.parent.parent / ".env",  # project root .env
+# Try to load .env files from multiple locations
+# Priority: .env.local (local overrides) > .env (default) > project root .env
+# Load both .env and .env.local if they exist, with .env.local taking precedence
+env_files_priority = [
+    Path(__file__).parent.parent / ".env",  # backend/.env (base config)
+    Path(__file__).parent.parent / ".env.local",  # backend/.env.local (local overrides - highest priority)
+    Path(__file__).parent.parent.parent / ".env",  # project root .env (fallback)
 ]
 
 env_loaded = False
-for env_file in env_files:
-    if env_file.exists():
-        load_dotenv(dotenv_path=env_file)
-        logger_temp = logging.getLogger(__name__)
-        logger_temp.info(f"Loaded environment variables from {env_file}")
-        env_loaded = True
-        break
+loaded_files = []
 
-if not env_loaded:
+# Load all existing env files in order (later files override earlier ones)
+for env_file in env_files_priority:
+    if env_file.exists():
+        load_dotenv(dotenv_path=env_file, override=True)  # override=True ensures .env.local overrides .env
+        loaded_files.append(env_file)
+        env_loaded = True
+
+if env_loaded:
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.info(f"Loaded environment variables from: {', '.join(str(f) for f in loaded_files)}")
+    if Path(__file__).parent.parent / ".env.local" in loaded_files:
+        logger_temp.info("Using .env.local for local configuration overrides")
+else:
     # Fallback to default load_dotenv behavior
     load_dotenv()
     logger_temp = logging.getLogger(__name__)
@@ -47,6 +55,13 @@ def get_db_connection():
     port = os.getenv("PORT")
     service_name = os.getenv("SERVICE")
     
+    # Debug: Log which variables are loaded (without sensitive values)
+    logger.debug(f"Environment variables loaded - ORACLE_JDBC_URL: {'SET' if jdbc_url else 'NOT SET'}, "
+                 f"ORACLE_USER: {'SET' if username else 'NOT SET'}, "
+                 f"ORACLE_PASSWORD: {'SET' if password else 'NOT SET'}, "
+                 f"PORT: {port if port else 'NOT SET'}, "
+                 f"SERVICE: {service_name if service_name else 'NOT SET'}")
+    
     # Check for missing environment variables
     missing_vars = []
     if not jdbc_url:
@@ -59,6 +74,7 @@ def get_db_connection():
     if missing_vars:
         error_msg = f"Missing required database environment variables: {', '.join(missing_vars)}"
         logger.error(error_msg)
+        logger.error("Please check your .env.local file in the backend directory")
         raise ValueError(error_msg)
     
     # Parse JDBC URL if it's in JDBC format
@@ -111,18 +127,39 @@ def get_db_connection():
         # Log connection attempt (without sensitive data)
         logger.info(f"Attempting to connect to Oracle database at {final_host}:{final_port}/{final_service} as user {username}")
         
-        dsn = oracledb.makedsn(final_host, final_port, service_name=final_service)
+        # Quick network connectivity test before attempting Oracle connection
+        import socket
+        try:
+            logger.debug(f"Testing network connectivity to {final_host}:{final_port}...")
+            test_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            test_socket.settimeout(5)  # 5 second timeout for connectivity test
+            result = test_socket.connect_ex((final_host, int(final_port)))
+            test_socket.close()
+            if result != 0:
+                logger.warning(f"Network connectivity test failed - port {final_port} on {final_host} is not reachable")
+                logger.warning("This suggests a network/firewall issue, not a database authentication issue")
+            else:
+                logger.debug(f"Network connectivity test passed - port {final_port} is reachable")
+        except Exception as net_err:
+            logger.warning(f"Network connectivity test error: {net_err}")
+        
+        # Create DSN with connection timeout configuration
+        # Note: python-oracledb doesn't support timeout in connect(), but we can set it in DSN
+        # Connection timeout is typically handled at the network level
+        dsn = oracledb.makedsn(
+            host=final_host, 
+            port=final_port, 
+            service_name=final_service
+        )
         logger.debug(f"DSN created: {dsn}")
         
-        # Configure connection timeout (default is 60 seconds, but we'll set it explicitly)
-        # Also set login timeout to fail faster if connection is not possible
-        connection_timeout = int(os.getenv("ORACLE_CONNECTION_TIMEOUT", "30"))  # Default 30 seconds
-        
+        # Attempt connection
+        # Note: If connection times out, it's likely a network/firewall issue
+        # Check: VPN connection, security groups, network access
         connection = oracledb.connect(
             user=username, 
             password=password, 
-            dsn=dsn,
-            timeout=connection_timeout
+            dsn=dsn
         )
         logger.info("Database connection established successfully")
         return connection
@@ -130,10 +167,34 @@ def get_db_connection():
         error_msg = f"Database connection failed: {str(e)}"
         logger.error(error_msg)
         logger.error(f"Connection details - Host: {final_host}, Port: {final_port}, Service: {final_service}, User: {username}")
+        
+        # Provide troubleshooting hints for common timeout issues
+        if "timed out" in str(e).lower() or "timeout" in str(e).lower():
+            logger.error("=" * 60)
+            logger.error("TROUBLESHOOTING: Connection timeout detected")
+            logger.error("=" * 60)
+            logger.error("Since this was working yesterday, likely causes:")
+            logger.error("  1. Your IP address changed (if using dynamic IP)")
+            logger.error("     → Check your current IP and verify it's in AWS Security Group")
+            logger.error("  2. AWS Security Group rules changed")
+            logger.error("     → Your IP may have been removed from allowed list")
+            logger.error("  3. Network routing/firewall changes")
+            logger.error("     → Corporate firewall or ISP may have changed rules")
+            logger.error("")
+            logger.error("Quick tests to run:")
+            logger.error("  PowerShell: Test-NetConnection -ComputerName {} -Port {}".format(final_host, final_port))
+            logger.error("  Or: telnet {} {}".format(final_host, final_port))
+            logger.error("")
+            logger.error("If network test fails, contact your DBA/DevOps team to:")
+            logger.error("  - Verify your current IP is in RDS Security Group")
+            logger.error("  - Check if RDS instance is running and accessible")
+            logger.error("=" * 60)
+        
         raise
     except Exception as e:
         error_msg = f"Unexpected error during database connection: {str(e)}"
         logger.error(error_msg)
+        logger.error(f"Connection details - Host: {final_host}, Port: {final_port}, Service: {final_service}, User: {username}")
         raise
 
 

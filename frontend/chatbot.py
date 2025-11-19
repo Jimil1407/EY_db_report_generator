@@ -71,154 +71,166 @@ if prompt := st.chat_input("Enter your question:"):
     st.session_state.messages.append({"role": "user", "content": prompt})
 
     with st.chat_message("assistant"):
-        with st.spinner("Generating SQL query..."):
-            try:
-                # Prepare the payload
-                payload = {
-                    "user_name": user_name,
-                    "user_email": user_email,
-                    "query": prompt
-                }
-                headers = {"Content-Type": "application/json"}
+        try:
+            # Prepare the payload
+            payload = {
+                "user_name": user_name,
+                "user_email": user_email,
+                "query": prompt
+            }
+            headers = {"Content-Type": "application/json"}
 
-                # Make the API call
+            # Step 1: Show table selection status
+            with st.spinner("Selecting tables..."):
+                # Make the API call (this does both table selection and SQL generation)
                 response = requests.post(
                     f"{BACKEND_URL}/generate-sql",
                     data=json.dumps(payload),
                     headers=headers
                 )
 
-                if response.status_code == 200:
-                    data = response.json()
-                    sql_query = data.get("sql_query", "No SQL query generated.")
-                    
-                    # Display the SQL query
-                    st.code(sql_query, language="sql")
-                    
-                    # Execute the query
-                    with st.spinner("Executing query..."):
-                        try:
-                            execute_payload = {"sql_query": sql_query}
-                            execute_response = requests.post(
-                                f"{BACKEND_URL}/execute-query",
-                                data=json.dumps(execute_payload),
-                                headers=headers
-                            )
+            if response.status_code == 200:
+                data = response.json()
+                selected_tables = data.get("selected_tables", [])
+                sql_query = data.get("sql_query", "No SQL query generated.")
+                
+                # Display selected tables
+                if selected_tables:
+                    st.success(f"**Selected tables:** {', '.join(selected_tables)}")
+                
+                # Step 2: Show SQL generation status (already done, but show for consistency)
+                st.info("**Generating SQL query...**")
+                
+                # Display the SQL query
+                st.code(sql_query, language="sql")
+                
+                # Execute the query
+                with st.spinner("Executing query..."):
+                    try:
+                        execute_payload = {"sql_query": sql_query}
+                        execute_response = requests.post(
+                            f"{BACKEND_URL}/execute-query",
+                            data=json.dumps(execute_payload),
+                            headers=headers
+                        )
+                        
+                        if execute_response.status_code == 200:
+                            execute_data = execute_response.json()
                             
-                            if execute_response.status_code == 200:
-                                execute_data = execute_response.json()
+                            if execute_data.get("status") == "success":
+                                results = execute_data.get("results", [])
+                                columns = execute_data.get("columns", [])
+                                row_count = execute_data.get("row_count", 0)
                                 
-                                if execute_data.get("status") == "success":
-                                    results = execute_data.get("results", [])
-                                    columns = execute_data.get("columns", [])
-                                    row_count = execute_data.get("row_count", 0)
+                                if row_count > 0:
+                                    # Convert results to DataFrame
+                                    df = pd.DataFrame(results)
                                     
-                                    if row_count > 0:
-                                        # Convert results to DataFrame
-                                        df = pd.DataFrame(results)
+                                    # Check if more than 5 rows
+                                    if row_count > 5:
+                                        # Prepare CSV download
+                                        csv_buffer = io.StringIO()
+                                        df.to_csv(csv_buffer, index=False)
+                                        csv_string = csv_buffer.getvalue()
                                         
-                                        # Check if more than 5 rows
-                                        if row_count > 5:
-                                            # Prepare CSV download
-                                            csv_buffer = io.StringIO()
-                                            df.to_csv(csv_buffer, index=False)
-                                            csv_string = csv_buffer.getvalue()
-                                            
-                                            # Get the index for this message (will be the next index)
-                                            message_idx = len(st.session_state.messages)
-                                            
-                                            # Store CSV data in session state
-                                            st.session_state.csv_data[message_idx] = {
-                                                "csv_string": csv_string,
-                                                "file_name": f"query_results_{message_idx}.csv",
-                                                "row_count": row_count,
-                                                "preview_df": df.head(5)
-                                            }
-                                            
-                                            st.info(f"Query returned {row_count} rows. Download the CSV file below:")
-                                            st.download_button(
-                                                label="Download Results as CSV",
-                                                data=csv_string,
-                                                file_name=f"query_results_{message_idx}.csv",
-                                                mime="text/csv",
-                                                key=f"download_new_{message_idx}"
-                                            )
-                                            
-                                            # Show first 5 rows as preview
-                                            st.markdown("**Preview (first 5 rows):**")
-                                            st.dataframe(df.head(5), use_container_width=True)
-                                            
-                                            # Store in session state
-                                            st.session_state.messages.append({
-                                                "role": "assistant", 
-                                                "content": f"```sql\n{sql_query}\n```\n\nQuery executed successfully. Returned {row_count} rows. CSV download available."
-                                            })
-                                        else:
-                                            # Display all results in a table
-                                            st.markdown(f"**Query Results ({row_count} rows):**")
-                                            st.dataframe(df, use_container_width=True)
-                                            
-                                            # Also store CSV data for small results (optional download)
-                                            message_idx = len(st.session_state.messages)
-                                            csv_buffer = io.StringIO()
-                                            df.to_csv(csv_buffer, index=False)
-                                            csv_string = csv_buffer.getvalue()
-                                            
-                                            st.session_state.csv_data[message_idx] = {
-                                                "csv_string": csv_string,
-                                                "file_name": f"query_results_{message_idx}.csv",
-                                                "row_count": row_count,
-                                                "preview_df": None
-                                            }
-                                            
-                                            # Store in session state
-                                            st.session_state.messages.append({
-                                                "role": "assistant", 
-                                                "content": f"```sql\n{sql_query}\n```\n\nQuery executed successfully. Returned {row_count} rows."
-                                            })
-                                    else:
-                                        st.info("Query executed successfully but returned no results.")
+                                        # Get the index for this message (will be the next index)
+                                        message_idx = len(st.session_state.messages)
+                                        
+                                        # Store CSV data in session state
+                                        st.session_state.csv_data[message_idx] = {
+                                            "csv_string": csv_string,
+                                            "file_name": f"query_results_{message_idx}.csv",
+                                            "row_count": row_count,
+                                            "preview_df": df.head(5)
+                                        }
+                                        
+                                        st.info(f"Query returned {row_count} rows. Download the CSV file below:")
+                                        st.download_button(
+                                            label="Download Results as CSV",
+                                            data=csv_string,
+                                            file_name=f"query_results_{message_idx}.csv",
+                                            mime="text/csv",
+                                            key=f"download_new_{message_idx}"
+                                        )
+                                        
+                                        # Show first 5 rows as preview
+                                        st.markdown("**Preview (first 5 rows):**")
+                                        st.dataframe(df.head(5), use_container_width=True)
+                                        
+                                        # Store in session state
+                                        tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""
                                         st.session_state.messages.append({
                                             "role": "assistant", 
-                                            "content": f"```sql\n{sql_query}\n```\n\nQuery executed successfully but returned no results."
+                                            "content": f"{tables_info}```sql\n{sql_query}\n```\n\nQuery executed successfully. Returned {row_count} rows. CSV download available."
+                                        })
+                                    else:
+                                        # Display all results in a table
+                                        st.markdown(f"**Query Results ({row_count} rows):**")
+                                        st.dataframe(df, use_container_width=True)
+                                        
+                                        # Also store CSV data for small results (optional download)
+                                        message_idx = len(st.session_state.messages)
+                                        csv_buffer = io.StringIO()
+                                        df.to_csv(csv_buffer, index=False)
+                                        csv_string = csv_buffer.getvalue()
+                                        
+                                        st.session_state.csv_data[message_idx] = {
+                                            "csv_string": csv_string,
+                                            "file_name": f"query_results_{message_idx}.csv",
+                                            "row_count": row_count,
+                                            "preview_df": None
+                                        }
+                                        
+                                        # Store in session state
+                                        tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""
+                                        st.session_state.messages.append({
+                                            "role": "assistant", 
+                                            "content": f"{tables_info}```sql\n{sql_query}\n```\n\nQuery executed successfully. Returned {row_count} rows."
                                         })
                                 else:
-                                    error_msg = execute_data.get("error", "Unknown error occurred")
-                                    st.error(f"Query execution failed: {error_msg}")
+                                    st.info("Query executed successfully but returned no results.")
+                                    tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""
                                     st.session_state.messages.append({
                                         "role": "assistant", 
-                                        "content": f"```sql\n{sql_query}\n```\n\nError: {error_msg}"
+                                        "content": f"{tables_info}```sql\n{sql_query}\n```\n\nQuery executed successfully but returned no results."
                                     })
                             else:
-                                error_message = f"Error executing query: {execute_response.status_code} - {execute_response.text}"
-                                st.error(error_message)
+                                error_msg = execute_data.get("error", "Unknown error occurred")
+                                st.error(f"Query execution failed: {error_msg}")
                                 st.session_state.messages.append({
                                     "role": "assistant", 
-                                    "content": f"```sql\n{sql_query}\n```\n\n{error_message}"
+                                    "content": f"```sql\n{sql_query}\n```\n\nError: {error_msg}"
                                 })
-                        except requests.exceptions.ConnectionError:
-                            error_message = "Could not connect to the backend API to execute query. Make sure it is running."
+                        else:
+                            error_message = f"Error executing query: {execute_response.status_code} - {execute_response.text}"
                             st.error(error_message)
                             st.session_state.messages.append({
                                 "role": "assistant", 
                                 "content": f"```sql\n{sql_query}\n```\n\n{error_message}"
                             })
-                        except Exception as e:
-                            error_message = f"An error occurred while executing query: {e}"
-                            st.error(error_message)
-                            st.session_state.messages.append({
-                                "role": "assistant", 
-                                "content": f"```sql\n{sql_query}\n```\n\n{error_message}"
-                            })
-                else:
-                    error_message = f"Error: {response.status_code} - {response.text}"
-                    st.error(error_message)
-                    st.session_state.messages.append({"role": "assistant", "content": error_message})
-            except requests.exceptions.ConnectionError:
-                error_message = "Could not connect to the backend API. Make sure it is running."
+                    except requests.exceptions.ConnectionError:
+                        error_message = "Could not connect to the backend API to execute query. Make sure it is running."
+                        st.error(error_message)
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": f"```sql\n{sql_query}\n```\n\n{error_message}"
+                        })
+                    except Exception as e:
+                        error_message = f"An error occurred while executing query: {e}"
+                        st.error(error_message)
+                        st.session_state.messages.append({
+                            "role": "assistant", 
+                            "content": f"```sql\n{sql_query}\n```\n\n{error_message}"
+                        })
+            else:
+                error_message = f"Error: {response.status_code} - {response.text}"
                 st.error(error_message)
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
-            except Exception as e:
-                error_message = f"An error occurred: {e}"
-                st.error(error_message)
-                st.session_state.messages.append({"role": "assistant", "content": error_message})
+        except requests.exceptions.ConnectionError:
+            error_message = "Could not connect to the backend API. Make sure it is running."
+            st.error(error_message)
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
+        except Exception as e:
+            error_message = f"An error occurred: {e}"
+            st.error(error_message)
+            st.session_state.messages.append({"role": "assistant", "content": error_message})
