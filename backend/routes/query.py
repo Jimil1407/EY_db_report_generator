@@ -54,12 +54,15 @@ async def generate_sql(request: GenerateSQLRequest):
         # Import here to avoid circular imports; support both package and script runs
         try:
             from ..ai.sql_generator import SQLGenerator
+            from ..ai.table_selector import TableSelector
         except ImportError:
             try:
                 from backend.ai.sql_generator import SQLGenerator
+                from backend.ai.table_selector import TableSelector
             except ImportError:
                 try:
                     from ai.sql_generator import SQLGenerator
+                    from ai.table_selector import TableSelector
                 except ImportError:
                     # Last resort - direct import
                     import sys
@@ -68,6 +71,7 @@ async def generate_sql(request: GenerateSQLRequest):
                     if str(backend_path) not in sys.path:
                         sys.path.insert(0, str(backend_path))
                     from ai.sql_generator import SQLGenerator
+                    from ai.table_selector import TableSelector
         
         # Get API key
         try:
@@ -79,11 +83,21 @@ async def generate_sql(request: GenerateSQLRequest):
                 detail=str(e)
             )
 
-        # Initialize SQL Generator with API key
-        logger.info(f"[API] Initializing SQL Generator with API key: {current_api_key[:10]}...")
-        sql_generator = SQLGenerator(few_shots=FEW_SHOT_EXAMPLES, api_key=current_api_key)
+        # Step 1: Select relevant tables using Gemini
+        logger.info(f"[API] generate-sql: Selecting relevant tables for query with user_email {request.user_email}")
+        table_selector = TableSelector(api_key=current_api_key)
+        selected_tables = table_selector.select_tables(request.query)
+        logger.info(f"[API] generate-sql: Selected tables: {selected_tables} with user_email {request.user_email}")
+
+        # Step 2: Initialize SQL Generator with selected tables
+        logger.info(f"[API] Initializing SQL Generator with API key: {current_api_key[:10]}... and selected tables: {selected_tables}")
+        sql_generator = SQLGenerator(
+            few_shots=FEW_SHOT_EXAMPLES, 
+            api_key=current_api_key,
+            selected_tables=selected_tables
+        )
         
-        # Generate SQL using AI
+        # Step 3: Generate SQL using AI with filtered schema
         generated_sql = sql_generator.generate_query(request.query)
         
         # Validate SQL is read-only

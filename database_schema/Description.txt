@@ -1,0 +1,12 @@
+ASRIT_CASE: Capturing case details like preauth date, surgery date, claim date and speciality used
+ASRIT_PATIENT: All details of patient from which district and which hospital going  to admit and type of registration
+ASRIT_CASE_SURGERY: capturing of surgeries details against the case.
+ASRIT_CASE_PATIENT_BIOMETRIC: patient biometric in time capture and out time capture
+ASRIT_CASE_CLAIM: claim details against a case
+ASRIT_AUDIT: Audit of each case as per workflow
+ASRIM_SURGERY:
+ASRIM_HOSPITALS: 
+ASRIM_DIST_SEQ: District wise count of cards added count capture
+ASRIM_DISEASE_MAIN: 
+
+

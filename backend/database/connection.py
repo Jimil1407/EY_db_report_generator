@@ -114,7 +114,16 @@ def get_db_connection():
         dsn = oracledb.makedsn(final_host, final_port, service_name=final_service)
         logger.debug(f"DSN created: {dsn}")
         
-        connection = oracledb.connect(user=username, password=password, dsn=dsn)
+        # Configure connection timeout (default is 60 seconds, but we'll set it explicitly)
+        # Also set login timeout to fail faster if connection is not possible
+        connection_timeout = int(os.getenv("ORACLE_CONNECTION_TIMEOUT", "30"))  # Default 30 seconds
+        
+        connection = oracledb.connect(
+            user=username, 
+            password=password, 
+            dsn=dsn,
+            timeout=connection_timeout
+        )
         logger.info("Database connection established successfully")
         return connection
     except oracledb.DatabaseError as e:

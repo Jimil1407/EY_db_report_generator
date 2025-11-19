@@ -9,16 +9,18 @@ CRITICAL RULES - YOU MUST FOLLOW THESE STRICTLY:
 4. **DO NOT USE ANY COLUMN NAMES THAT ARE NOT EXPLICITLY LISTED IN THE SCHEMA**
 5. **IF A COLUMN IS NOT IN THE SCHEMA, DO NOT USE IT - EVEN IF IT SEEMS LOGICAL**
 6. **ONLY USE THE EXACT COLUMN NAMES AS SHOWN IN THE SCHEMA (case-sensitive)**
-7. **ALWAYS INCLUDE THE FROM CLAUSE WITH THE TABLE NAME: FROM ASRIT_PATIENT**
-8. **EVERY SQL QUERY MUST HAVE: SELECT ... FROM ASRIT_PATIENT [WHERE ...] [ORDER BY ...] [FETCH FIRST N ROWS ONLY]**
-9. Generate a valid, complete Oracle SQL query that answers the user's question
-10. Use Oracle SQL syntax (e.g., FETCH FIRST N ROWS ONLY for limiting results)
-11. **PREFER USING SELECT * WHEN USER ASKS FOR "ALL DETAILS", "COMPLETE INFORMATION", "ALL DATA", "EVERYTHING", OR SIMILAR PHRASES**
-12. **KEEP QUERIES COMPACT - Use SELECT * instead of listing many individual columns when appropriate**
-13. **Only list specific columns when the user explicitly asks for specific fields**
-14. **NEVER generate incomplete queries - always include FROM clause and table name**
+7. **ALWAYS INCLUDE THE FROM CLAUSE WITH ONE OR MORE TABLE NAMES FROM THE SCHEMA BELOW**
+8. **EVERY SQL QUERY MUST HAVE: SELECT ... FROM <table_name> [JOIN ...] [WHERE ...] [ORDER BY ...] [FETCH FIRST N ROWS ONLY]**
+9. **You can use multiple tables with JOINs if needed to answer the query**
+10. Generate a valid, complete Oracle SQL query that answers the user's question
+11. Use Oracle SQL syntax (e.g., FETCH FIRST N ROWS ONLY for limiting results)
+12. **PREFER USING SELECT * WHEN USER ASKS FOR "ALL DETAILS", "COMPLETE INFORMATION", "ALL DATA", "EVERYTHING", OR SIMILAR PHRASES**
+13. **KEEP QUERIES COMPACT - Use SELECT * instead of listing many individual columns when appropriate**
+14. **Only list specific columns when the user explicitly asks for specific fields**
+15. **NEVER generate incomplete queries - always include FROM clause and at least one table name**
+16. **Use appropriate JOINs (INNER JOIN, LEFT JOIN, etc.) when querying multiple tables**
 
-AVAILABLE SCHEMA - THESE ARE THE ONLY COLUMNS YOU CAN USE:
+AVAILABLE SCHEMA - THESE ARE THE ONLY TABLES AND COLUMNS YOU CAN USE:
 """
     
     # Format few-shot examples
@@ -28,13 +30,13 @@ AVAILABLE SCHEMA - THESE ARE THE ONLY COLUMNS YOU CAN USE:
     prompt = (
         f"{system_instruction}\n"
         f"{schema_context}\n\n"
-        f"REMINDER: You can ONLY use the columns listed above. Do not invent or assume column names.\n"
+        f"REMINDER: You can ONLY use the tables and columns listed above. Do not invent or assume table or column names.\n"
         f"QUERY STYLE: Use SELECT * for comprehensive queries. List specific columns only when explicitly requested.\n"
-        f"CRITICAL: Every query MUST include 'FROM ASRIT_PATIENT'. Never generate incomplete SQL.\n\n"
+        f"CRITICAL: Every query MUST include a FROM clause with at least one table from the schema above. Use JOINs when querying multiple tables.\n\n"
         f"EXAMPLES:\n{few_shot_text}\n\n"
         f"USER QUESTION: {user_question}\n\n"
-        f"Generate a COMPLETE SQL query using ONLY the columns from the schema above. "
-        f"Remember to include FROM ASRIT_PATIENT. Use SELECT * when appropriate:\n"
+        f"Generate a COMPLETE SQL query using ONLY the tables and columns from the schema above. "
+        f"Remember to include FROM clause with appropriate table(s). Use SELECT * when appropriate:\n"
         f"SQL QUERY:"
     )
     return prompt

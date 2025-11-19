@@ -1,32 +1,72 @@
 from .gemini_client import GeminiClient
-from .schema_manager import load_schema, format_schema
+from .schema_manager import load_schema, format_schema, filter_schema_by_tables
 from .prompt_builder import build_gemini_prompt
+from typing import List, Optional
 import re
 
 class SQLGenerator:
-    def __init__(self, few_shots: list, api_key: str):
-        # Load fixed schema once and format for prompt context
-        schema_json = load_schema()  # returns JSON dict from file
+    def __init__(self, few_shots: list, api_key: str, selected_tables: Optional[List[str]] = None):
+        """
+        Initialize SQLGenerator with schema and optional table filtering.
+        
+        Args:
+            few_shots: List of few-shot examples for prompt
+            api_key: Gemini API key
+            selected_tables: Optional list of table names to filter schema. If None, uses all tables.
+        """
+        # Load fixed schema once
+        schema_json = load_schema()  # returns list of table objects from file
+        
+        # Filter schema if selected_tables provided
+        if selected_tables:
+            schema_json = filter_schema_by_tables(schema_json, selected_tables)
+        
+        # Format schema for prompt context
         self.schema_context = format_schema(schema_json)  # formatted schema string
         self.schema_json = schema_json  # Store for validation
         self.few_shots = few_shots
         self.gemini_client = GeminiClient(api_key=api_key)
         
-        # Extract valid column names from schema for validation
+        # Extract valid column names and table names from schema for validation
         self.valid_columns = set()
-        if isinstance(schema_json, dict) and "columns" in schema_json:
-            for col in schema_json.get("columns", []):
+        self.valid_tables = set()
+        
+        # Handle list of table objects (current schema.json format)
+        if isinstance(schema_json, list):
+            for table_obj in schema_json:
+                if isinstance(table_obj, dict):
+                    table_name = table_obj.get("tableName", "")
+                    if table_name:
+                        self.valid_tables.add(table_name.upper())
+                    
+                    columns = table_obj.get("columns", [])
+                    for col in columns:
+                        if isinstance(col, dict):
+                            name = col.get("name")
+                            if name:
+                                self.valid_columns.add(name.upper())
+                        elif isinstance(col, str):
+                            self.valid_columns.add(col.upper())
+        
+        # Handle single table object (legacy support)
+        elif isinstance(schema_json, dict) and "tableName" in schema_json:
+            table_name = schema_json.get("tableName", "")
+            if table_name:
+                self.valid_tables.add(table_name.upper())
+            
+            columns = schema_json.get("columns", [])
+            for col in columns:
                 if isinstance(col, dict):
                     name = col.get("name")
                     if name:
                         self.valid_columns.add(name.upper())
                 elif isinstance(col, str):
                     self.valid_columns.add(col.upper())
-        
-        # Get table name
-        self.table_name = schema_json.get("tableName", "").upper() if isinstance(schema_json, dict) else ""
 
     def generate_query(self, user_question: str) -> str:
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # Build full combined prompt using the shared prompt builder
         prompt = build_gemini_prompt(
             user_question=user_question,
@@ -36,13 +76,17 @@ class SQLGenerator:
 
         # Call Gemini API to generate SQL
         raw_output = self.gemini_client.generate_sql(prompt)
+        logger.debug(f"Raw SQL output from Gemini: {raw_output[:500]}...")  # Log first 500 chars
         
         # Sanitize: strip markdown fences, language tags, and leading labels
         sql = self._clean_sql_output(raw_output)
+        logger.debug(f"Cleaned SQL: {sql[:500]}...")  # Log first 500 chars
         
         # Validate SQL completeness
         completeness_error = self._validate_sql_completeness(sql)
         if completeness_error:
+            logger.error(f"SQL completeness validation failed. Raw output: {raw_output[:1000]}")
+            logger.error(f"Cleaned SQL: {sql[:1000]}")
             raise ValueError(f"Generated SQL is incomplete: {completeness_error}")
         
         # Validate that SQL only uses columns from schema
@@ -71,9 +115,16 @@ class SQLGenerator:
         if "FROM" not in sql_upper:
             return "SQL query must include FROM clause with table name"
         
-        # Must contain table name ASRIT_PATIENT
-        if "ASRIT_PATIENT" not in sql_upper:
-            return "SQL query must include FROM ASRIT_PATIENT"
+        # Check that at least one valid table is used
+        if self.valid_tables:
+            found_table = False
+            for table_name in self.valid_tables:
+                if table_name in sql_upper:
+                    found_table = True
+                    break
+            
+            if not found_table:
+                return f"SQL query must include one of the valid tables: {', '.join(sorted(self.valid_tables))}"
         
         # Check for incomplete SELECT (e.g., "SELECT *;" without FROM)
         select_match = re.search(r'SELECT\s+(.+?)\s+FROM', sql_upper, re.DOTALL)
@@ -197,16 +248,30 @@ class SQLGenerator:
         if fenced_match:
             cleaned = fenced_match.group(1).strip()
         # Remove leading labels like 'SQL:', 'SQL QUERY:', etc.
-        cleaned = re.sub(r"^(SQL\\s*QUERY\\s*:|SQL\\s*:)", "", cleaned, flags=re.IGNORECASE).strip()
-        # If multiple lines, take the first line that starts with SELECT
-        lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
-        for ln in lines:
-            if ln.upper().startswith("SELECT"):
-                return ln.rstrip(";") + ";"
-        # Fallback: try to extract the first SELECT ... ; span
-        m = re.search(r"(SELECT[\\s\\S]+?;)", cleaned, flags=re.IGNORECASE)
-        if m:
-            return m.group(1).strip()
+        cleaned = re.sub(r"^(SQL\s*QUERY\s*:|SQL\s*:)", "", cleaned, flags=re.IGNORECASE).strip()
+        
+        # Try to extract complete SQL query (handles multi-line queries)
+        # Look for SELECT ... ; pattern that may span multiple lines
+        sql_match = re.search(r"(SELECT[\s\S]+?;)", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        if sql_match:
+            sql = sql_match.group(1).strip()
+            # Clean up extra whitespace but preserve structure
+            sql = re.sub(r'\s+', ' ', sql)  # Replace multiple spaces/newlines with single space
+            # Restore newlines after keywords for readability (optional, but helps)
+            sql = re.sub(r'\s+(FROM|WHERE|JOIN|ON|ORDER BY|GROUP BY|HAVING|FETCH FIRST)', r'\n\1', sql, flags=re.IGNORECASE)
+            return sql
+        
+        # If no semicolon found, try to find SELECT statement until end of text
+        select_match = re.search(r"(SELECT[\s\S]+)", cleaned, flags=re.IGNORECASE | re.DOTALL)
+        if select_match:
+            sql = select_match.group(1).strip()
+            # Add semicolon if missing
+            if not sql.rstrip().endswith(';'):
+                sql = sql.rstrip() + ";"
+            # Clean up extra whitespace
+            sql = re.sub(r'\s+', ' ', sql)
+            return sql
+        
         # Last fallback: return cleaned as-is
         return cleaned
 

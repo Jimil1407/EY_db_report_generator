@@ -1,0 +1,43 @@
+[
+  {
+    "tableName": "ASRIT_CASE",
+    "description": "Capturing case details like preauth date, surgery date, claim date and speciality used"
+  },
+  {
+    "tableName": "ASRIT_PATIENT",
+    "description": "All details of patient from which district and which hospital going to admit and type of registration"
+  },
+  {
+    "tableName": "ASRIT_CASE_SURGERY",
+    "description": "capturing of surgeries details against the case."
+  },
+  {
+    "tableName": "ASRIT_CASE_PATIENT_BIOMETRIC",
+    "description": "patient biometric in time capture and out time capture"
+  },
+  {
+    "tableName": "ASRIT_CASE_CLAIM",
+    "description": "claim details against a case"
+  },
+  {
+    "tableName": "ASRIT_AUDIT",
+    "description": "Audit of each case as per workflow"
+  },
+  {
+    "tableName": "ASRIM_SURGERY",
+    "description": "Master table containing surgery codes, descriptions, and pricing information"
+  },
+  {
+    "tableName": "ASRIM_HOSPITALS",
+    "description": "Master table containing hospital details, contact information, and location data"
+  },
+  {
+    "tableName": "ASRIM_DIST_SEQ",
+    "description": "District wise count of cards added count capture"
+  },
+  {
+    "tableName": "ASRIM_DISEASE_MAIN",
+    "description": "Master table containing main disease categories and classifications"
+  }
+]
+
