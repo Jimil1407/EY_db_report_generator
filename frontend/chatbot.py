@@ -3,6 +3,7 @@ import requests
 import json
 import pandas as pd
 import io
+import base64
 
 # Backend API URL
 BACKEND_URL = "http://localhost:8000"
@@ -41,6 +42,71 @@ if "messages" not in st.session_state:
 if "csv_data" not in st.session_state:
     st.session_state.csv_data = {}
 
+# Initialize PDF report storage
+if "pdf_reports" not in st.session_state:
+    st.session_state.pdf_reports = {}
+
+
+def generate_pdf_report_for_message(message_idx: int) -> bool:
+    """Generate a PDF report for the CSV data associated with a chat message."""
+    csv_info = st.session_state.csv_data.get(message_idx)
+    if not csv_info:
+        return False
+    
+    csv_string = csv_info.get("csv_string")
+    if not csv_string:
+        csv_info["pdf_status"] = "error"
+        csv_info["pdf_error"] = "Missing CSV data for PDF generation."
+        return False
+    
+    # Avoid duplicate work if PDF already exists
+    if st.session_state.pdf_reports.get(message_idx):
+        csv_info["pdf_status"] = "ready"
+        csv_info.pop("pdf_error", None)
+        return True
+    
+    csv_info["pdf_status"] = "processing"
+    pdf_payload = {
+        "csv_data": csv_string,
+        "title": csv_info.get("title") or f"Query Results {message_idx}",
+        "report_description": csv_info.get("description"),
+    }
+    
+    try:
+        pdf_response = requests.post(
+            f"{BACKEND_URL}/generate-pdf",
+            data=json.dumps(pdf_payload),
+            headers={"Content-Type": "application/json"},
+            timeout=60,
+        )
+        if pdf_response.status_code != 200:
+            csv_info["pdf_status"] = "error"
+            csv_info["pdf_error"] = (
+                f"PDF generation failed: {pdf_response.status_code} - {pdf_response.text}"
+            )
+            return False
+        
+        pdf_data = pdf_response.json()
+        pdf_bytes = base64.b64decode(pdf_data.get("pdf_data", ""))
+        st.session_state.pdf_reports[message_idx] = {
+            "pdf_bytes": pdf_bytes,
+            "file_name": pdf_data.get("file_name", f"query_results_{message_idx}.pdf"),
+        }
+        csv_info["pdf_status"] = "ready"
+        csv_info.pop("pdf_error", None)
+        return True
+    
+    except requests.exceptions.ConnectionError:
+        csv_info["pdf_status"] = "error"
+        csv_info["pdf_error"] = (
+            "Could not connect to the backend API to generate PDF. Make sure it is running."
+        )
+    except Exception as e:
+        csv_info["pdf_status"] = "error"
+        csv_info["pdf_error"] = f"An error occurred while generating the PDF: {e}"
+    
+    return False
+
 # Display chat messages from history on app rerun
 for idx, message in enumerate(st.session_state.messages):
     with st.chat_message(message["role"]):
@@ -62,6 +128,36 @@ for idx, message in enumerate(st.session_state.messages):
             if csv_info.get("preview_df") is not None:
                 st.markdown("**Preview (first 5 rows):**")
                 st.dataframe(csv_info["preview_df"], width="stretch")
+
+            # PDF generation controls
+            pdf_info = st.session_state.pdf_reports.get(idx)
+            pdf_status = csv_info.get("pdf_status")
+
+            if pdf_status in (None, "pending"):
+                csv_info["pdf_status"] = "pending"
+                with st.spinner("Analyzing CSV and generating PDF report..."):
+                    generate_pdf_report_for_message(idx)
+                pdf_info = st.session_state.pdf_reports.get(idx)
+                pdf_status = csv_info.get("pdf_status")
+
+            if pdf_info:
+                st.success("PDF report ready for download.")
+                st.download_button(
+                    label="Download PDF Report",
+                    data=pdf_info["pdf_bytes"],
+                    file_name=pdf_info["file_name"],
+                    mime="application/pdf",
+                    key=f"download_pdf_{idx}"
+                )
+            elif pdf_status == "processing":
+                st.info("Generating PDF report...")
+            elif pdf_status == "error":
+                st.error(csv_info.get("pdf_error", "Failed to generate PDF report."))
+                if st.button("Retry PDF generation", key=f"retry_pdf_{idx}"):
+                    with st.spinner("Retrying PDF report generation..."):
+                        generate_pdf_report_for_message(idx)
+                        if st.session_state.pdf_reports.get(idx):
+                            st.experimental_rerun()
 
 # React to user input
 if prompt := st.chat_input("Enter your question:"):
@@ -141,8 +237,29 @@ if prompt := st.chat_input("Enter your question:"):
                                             "csv_string": csv_string,
                                             "file_name": f"query_results_{message_idx}.csv",
                                             "row_count": row_count,
-                                            "preview_df": df.head(5)
+                                            "preview_df": df.head(5),
+                                            "title": f"Query Results {message_idx}",
+                                            "description": (
+                                                f"Results generated for SQL query:\n{sql_query}\n\n"
+                                                f"Original question: {prompt}\nRows returned: {row_count}"
+                                            ),
+                                            "sql_query": sql_query,
+                                            "prompt": prompt,
+                                            "pdf_status": "pending",
                                         }
+                                        
+                                        with st.spinner("Analyzing CSV results and generating PDF report..."):
+                                            generate_pdf_report_for_message(message_idx)
+                                        
+                                        pdf_ready = (
+                                            st.session_state.csv_data[message_idx].get("pdf_status") == "ready"
+                                        )
+                                        pdf_info = st.session_state.pdf_reports.get(message_idx)
+                                        pdf_note = (
+                                            " PDF report generated automatically."
+                                            if pdf_ready
+                                            else " PDF report will be available shortly."
+                                        )
                                         
                                         st.info(f"Query returned {row_count} rows. Download the CSV file below:")
                                         st.download_button(
@@ -157,11 +274,25 @@ if prompt := st.chat_input("Enter your question:"):
                                         st.markdown("**Preview (first 5 rows):**")
                                         st.dataframe(df.head(5), width="stretch")
                                         
+                                        if pdf_ready and pdf_info:
+                                            st.success("PDF report ready for download.")
+                                            st.download_button(
+                                                label="Download PDF Report",
+                                                data=pdf_info["pdf_bytes"],
+                                                file_name=pdf_info["file_name"],
+                                                mime="application/pdf",
+                                                key=f"download_pdf_new_{message_idx}"
+                                            )
+                                        
                                         # Store in session state
                                         tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""
                                         st.session_state.messages.append({
                                             "role": "assistant", 
-                                            "content": f"{tables_info}```sql\n{sql_query}\n```\n\nQuery executed successfully. Returned {row_count} rows. CSV download available."
+                                            "content": (
+                                                f"{tables_info}```sql\n{sql_query}\n```\n\n"
+                                                f"Query executed successfully. Returned {row_count} rows. "
+                                                f"CSV download available.{pdf_note}"
+                                            )
                                         })
                                     else:
                                         # Display all results in a table
@@ -178,15 +309,49 @@ if prompt := st.chat_input("Enter your question:"):
                                             "csv_string": csv_string,
                                             "file_name": f"query_results_{message_idx}.csv",
                                             "row_count": row_count,
-                                            "preview_df": None
+                                            "preview_df": None,
+                                            "title": f"Query Results {message_idx}",
+                                            "description": (
+                                                f"Results generated for SQL query:\n{sql_query}\n\n"
+                                                f"Original question: {prompt}\nRows returned: {row_count}"
+                                            ),
+                                            "sql_query": sql_query,
+                                            "prompt": prompt,
+                                            "pdf_status": "pending",
                                         }
+                                        
+                                        with st.spinner("Analyzing CSV results and generating PDF report..."):
+                                            generate_pdf_report_for_message(message_idx)
+                                        
+                                        pdf_ready = (
+                                            st.session_state.csv_data[message_idx].get("pdf_status") == "ready"
+                                        )
+                                        pdf_info = st.session_state.pdf_reports.get(message_idx)
+                                        pdf_note = (
+                                            " PDF report generated automatically."
+                                            if pdf_ready
+                                            else " PDF report will be available shortly."
+                                        )
                                         
                                         # Store in session state
                                         tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""
                                         st.session_state.messages.append({
                                             "role": "assistant", 
-                                            "content": f"{tables_info}```sql\n{sql_query}\n```\n\nQuery executed successfully. Returned {row_count} rows."
+                                            "content": (
+                                                f"{tables_info}```sql\n{sql_query}\n```\n\n"
+                                                f"Query executed successfully. Returned {row_count} rows.{pdf_note}"
+                                            )
                                         })
+                                        
+                                        if pdf_ready and pdf_info:
+                                            st.success("PDF report ready for download.")
+                                            st.download_button(
+                                                label="Download PDF Report",
+                                                data=pdf_info["pdf_bytes"],
+                                                file_name=pdf_info["file_name"],
+                                                mime="application/pdf",
+                                                key=f"download_pdf_new_{message_idx}"
+                                            )
                                 else:
                                     st.info("Query executed successfully but returned no results.")
                                     tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""

@@ -119,7 +119,7 @@ class PDFReportGenerator:
             story.append(Spacer(1, 0.2*inch))
             
             # Report metadata
-            story.append(self._create_metadata_section())
+            story.extend(self._create_metadata_section())
             story.append(Spacer(1, 0.3*inch))
             
             # Description if provided
@@ -133,22 +133,23 @@ class PDFReportGenerator:
             story.extend(self._create_summary_statistics(df))
             story.append(Spacer(1, 0.2*inch))
             
-            # Data Preview Table (first 20 rows)
-            story.append(Paragraph("Data Preview", self.styles['CustomHeading']))
-            story.append(Paragraph(
-                f"Showing first {min(20, len(df))} rows of {len(df)} total rows",
-                self.styles['Metadata']
-            ))
-            story.append(Spacer(1, 0.1*inch))
-            story.extend(self._create_data_table(df.head(20)))
+            # Automated Insights
+            story.append(Paragraph("Automated Insights", self.styles['CustomHeading']))
+            story.extend(self._create_automated_insights(df))
+            story.append(Spacer(1, 0.2*inch))
             
-            # If more rows, add note
-            if len(df) > 20:
-                story.append(Spacer(1, 0.1*inch))
-                story.append(Paragraph(
-                    f"Note: Only first 20 rows shown. Total rows: {len(df)}",
-                    self.styles['Metadata']
-                ))
+            # Numeric Highlights
+            numeric_cols = df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                story.append(Paragraph("Numeric Highlights", self.styles['CustomSubHeading']))
+                story.extend(self._create_numeric_highlights(df[numeric_cols]))
+                story.append(Spacer(1, 0.2*inch))
+            
+            # Categorical Highlights
+            categorical_cols = df.select_dtypes(include=['object', 'category']).columns
+            if len(categorical_cols) > 0:
+                story.append(Paragraph("Categorical Highlights", self.styles['CustomSubHeading']))
+                story.extend(self._create_categorical_highlights(df[categorical_cols]))
             
             # Build PDF
             doc.build(story)
@@ -259,75 +260,162 @@ class PDFReportGenerator:
         
         return stats
     
-    def _create_data_table(self, df: pd.DataFrame) -> List:
-        """Create data preview table."""
-        table_data = []
+    def _create_automated_insights(self, df: pd.DataFrame) -> List:
+        """Create textual insights summarizing dataset characteristics."""
+        insights = []
+        row_count = len(df)
+        col_count = len(df.columns)
+        numeric_cols = df.select_dtypes(include=['number'])
+        categorical_cols = df.select_dtypes(include=['object', 'category'])
         
-        # Header row
-        header = [str(col) for col in df.columns]
-        table_data.append(header)
+        bullet_points = [
+            f"Dataset contains {row_count:,} rows across {col_count} columns.",
+            f"{len(numeric_cols.columns)} numeric columns and {len(categorical_cols.columns)} categorical columns detected."
+        ]
         
-        # Data rows (limit columns if too many)
-        max_cols = 8  # Limit columns for readability
-        display_cols = df.columns[:max_cols] if len(df.columns) > max_cols else df.columns
+        null_counts = df.isna().sum()
+        if null_counts.max() > 0:
+            worst_col = null_counts.idxmax()
+            worst_pct = (null_counts[worst_col] / max(row_count, 1)) * 100
+            bullet_points.append(
+                f"Highest missing data observed in '{worst_col}' "
+                f"({null_counts[worst_col]:,} cells • {worst_pct:.1f}% of records)."
+            )
         
-        for idx, row in df.iterrows():
-            row_data = []
-            for col in display_cols:
-                value = row[col]
-                # Format the value
-                if pd.isna(value):
-                    row_data.append("N/A")
-                elif isinstance(value, (int, float)):
-                    row_data.append(f"{value:,.2f}" if isinstance(value, float) else f"{value:,}")
-                else:
-                    # Truncate long strings
-                    str_val = str(value)
-                    row_data.append(str_val[:30] + "..." if len(str_val) > 30 else str_val)
-            table_data.append(row_data)
+        if not numeric_cols.empty:
+            std_series = numeric_cols.std(numeric_only=True).dropna()
+            if not std_series.empty:
+                volatile_col = std_series.idxmax()
+                bullet_points.append(
+                    f"'{volatile_col}' shows the greatest variability (std dev {std_series[volatile_col]:,.2f})."
+                )
+            sum_series = numeric_cols.sum(numeric_only=True).dropna()
+            if not sum_series.empty:
+                top_sum = sum_series.idxmax()
+                bullet_points.append(
+                    f"'{top_sum}' contributes the largest aggregate value ({sum_series[top_sum]:,.2f})."
+                )
         
-        # Create table
-        # Calculate column widths
-        num_cols = len(display_cols)
-        if num_cols > 0:
-            col_width = (7.5 * inch) / num_cols
-            col_widths = [col_width] * num_cols
-        else:
-            col_widths = None
+        if not categorical_cols.empty:
+            unique_counts = categorical_cols.nunique(dropna=True)
+            if not unique_counts.empty:
+                richest_col = unique_counts.idxmax()
+                bullet_points.append(
+                    f"'{richest_col}' has the widest categorical diversity ({unique_counts[richest_col]:,} unique values)."
+                )
         
-        table = Table(table_data, colWidths=col_widths, repeatRows=1)
+        for text in bullet_points:
+            insights.append(Paragraph(f"• {text}", self.styles['CustomBody']))
+        return insights
+    
+    def _create_numeric_highlights(self, numeric_df: pd.DataFrame, limit: int = 6) -> List:
+        """Create aggregated statistics table for top numeric columns."""
+        highlights = []
+        summary_rows = []
         
-        # Style the table
+        for col in numeric_df.columns:
+            series = numeric_df[col].dropna()
+            if series.empty:
+                continue
+            summary_rows.append({
+                "column": str(col),
+                "sum": series.sum(),
+                "mean": series.mean(),
+                "median": series.median(),
+                "std": series.std(),
+                "min": series.min(),
+                "max": series.max(),
+            })
+        
+        if not summary_rows:
+            return [Paragraph("No numeric metrics available.", self.styles['CustomBody'])]
+        
+        summary_rows = sorted(summary_rows, key=lambda x: abs(x["sum"]), reverse=True)[:limit]
+        
+        table_data = [
+            ["Column", "Sum", "Mean", "Median", "Std Dev", "Min", "Max"]
+        ]
+        for row in summary_rows:
+            table_data.append([
+                row["column"],
+                f"{row['sum']:,.2f}",
+                f"{row['mean']:,.2f}",
+                f"{row['median']:,.2f}",
+                f"{row['std']:,.2f}" if pd.notna(row['std']) else "N/A",
+                f"{row['min']:,.2f}",
+                f"{row['max']:,.2f}",
+            ])
+        
+        table = Table(
+            table_data,
+            colWidths=[1.5*inch, 1.1*inch, 1.1*inch, 1.1*inch, 1.1*inch, 1.1*inch, 1.1*inch],
+            repeatRows=1
+        )
         table.setStyle(TableStyle([
-            # Header style
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#34495e')),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#2c3e50')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-            ('TOPPADDING', (0, 0), (-1, 0), 12),
-            
-            # Data rows
-            ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-            ('TEXTCOLOR', (0, 1), (-1, -1), colors.black),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8f9fa')]),
-            ('VALIGN', (0, 0), (-1, -1), 'TOP'),
         ]))
         
-        result = [table]
+        highlights.append(table)
+        if len(numeric_df.columns) > limit:
+            highlights.append(Spacer(1, 0.1*inch))
+            highlights.append(Paragraph(
+                f"Note: Showing top {limit} numeric columns by aggregate magnitude "
+                f"(total numeric columns: {len(numeric_df.columns)}).",
+                self.styles['Metadata']
+            ))
+        return highlights
+    
+    def _create_categorical_highlights(self, categorical_df: pd.DataFrame, limit: int = 3, top_values: int = 5) -> List:
+        """Summarize most frequent categories for selected columns."""
+        highlights = []
+        categorical_columns = [col for col in categorical_df.columns if categorical_df[col].notna().any()]
         
-        # Add note if columns were truncated
-        if len(df.columns) > max_cols:
-            result.append(Spacer(1, 0.1*inch))
-            result.append(Paragraph(
-                f"Note: Showing first {max_cols} columns. Total columns: {len(df.columns)}",
+        if not categorical_columns:
+            return [Paragraph("No categorical insights available.", self.styles['CustomBody'])]
+        
+        for col in categorical_columns[:limit]:
+            value_counts = categorical_df[col].value_counts(dropna=True).head(top_values)
+            total = value_counts.sum()
+            table_data = [["Category", "Records", "Share of non-null"]]
+            for category, count in value_counts.items():
+                share = (count / total) * 100 if total else 0
+                label = str(category) if pd.notna(category) else "N/A"
+                if len(label) > 25:
+                    label = label[:25] + "..."
+                table_data.append([label, f"{count:,}", f"{share:.1f}%"])
+            
+            highlights.append(Paragraph(str(col), self.styles['CustomSubHeading']))
+            table = Table(table_data, colWidths=[3.0*inch, 1.2*inch, 1.5*inch], repeatRows=1)
+            table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#7f8c8d')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (1, 1), (-1, -1), 'RIGHT'),
+                ('ALIGN', (0, 0), (0, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+                ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#ecf0f1')]),
+            ]))
+            highlights.append(table)
+            highlights.append(Spacer(1, 0.1*inch))
+        
+        if len(categorical_columns) > limit:
+            highlights.append(Paragraph(
+                f"Note: Displaying first {limit} categorical columns (of {len(categorical_columns)}) "
+                f"with their top {top_values} categories.",
                 self.styles['Metadata']
             ))
         
-        return result
+        return highlights
     
     def generate_pdf_from_file(self, csv_file_path: str, title: str = "Data Report") -> bytes:
         """
