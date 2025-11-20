@@ -61,7 +61,7 @@ for idx, message in enumerate(st.session_state.messages):
             # Show preview if available
             if csv_info.get("preview_df") is not None:
                 st.markdown("**Preview (first 5 rows):**")
-                st.dataframe(csv_info["preview_df"], use_container_width=True)
+                st.dataframe(csv_info["preview_df"], width="stretch")
 
 # React to user input
 if prompt := st.chat_input("Enter your question:"):
@@ -155,7 +155,7 @@ if prompt := st.chat_input("Enter your question:"):
                                         
                                         # Show first 5 rows as preview
                                         st.markdown("**Preview (first 5 rows):**")
-                                        st.dataframe(df.head(5), use_container_width=True)
+                                        st.dataframe(df.head(5), width="stretch")
                                         
                                         # Store in session state
                                         tables_info = f"**Selected tables:** {', '.join(selected_tables)}\n\n" if selected_tables else ""
@@ -166,7 +166,7 @@ if prompt := st.chat_input("Enter your question:"):
                                     else:
                                         # Display all results in a table
                                         st.markdown(f"**Query Results ({row_count} rows):**")
-                                        st.dataframe(df, use_container_width=True)
+                                        st.dataframe(df, width="stretch")
                                         
                                         # Also store CSV data for small results (optional download)
                                         message_idx = len(st.session_state.messages)

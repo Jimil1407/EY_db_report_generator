@@ -65,5 +65,61 @@ FEW_SHOT_EXAMPLES = [
         "q": "Get all patient information",
         "a": "SELECT * FROM ASRIT_PATIENT;",
     },
+    {
+        "user_name": "Report User",
+        "user_email": "report@example.com",
+        "q": "Show me a detailed report for dialysis cases (M6 disease, M6.5 surgery) in phase 7, excluding AP state, approved between April 1, 2024 and March 31, 2025. Include patient ration card, case ID, gender, hospital details with district, surgery details, patient district, all case dates (discharge, surgery, death, approval), preauth amount (prioritize CMO amount, then CEO if not zero, else Trust amount), number of biometric cycles per case, financial year (based on 3 months before approval date formatted as YYYY-YYYY+1), and month name and number from approval date.",
+        "a": """SELECT AP.RATION_CARD_NO,
+AC.CASE_ID,
+AP.GENDER,
+AH.HOSP_ID,
+AH.HOSP_NAME,
+ADS1.DIST_NAME HOSP_DIST,
+ACS.SURGERY_CODE,
+AS1.SURGERY_DESC,
+ADS2.DIST_NAME PATIENT_DIST,
+AC.CS_DIS_DT,
+AC.CS_SURG_DT,
+AC.CS_DEATH_DT,
+AC.CS_APPRV_REJ_DT,
+DECODE(ACC.CASE_CMO_APRV_AMT,
+NULL,
+(DECODE(ACC.CASE_CEO_APRV_AMT,
+null,
+ACC.CASE_TRUST_APRV_AMT,
+0,
+ACC.CASE_TRUST_APRV_AMT,
+ACC.CASE_CEO_APRV_AMT)),
+ACC.CASE_CMO_APRV_AMT) PREAUTH_AMOUNT,
+(SELECT COUNT(*)
+FROM ASRIT_CASE_PATIENT_BIOMETRIC
+WHERE CASE_ID = AC.CASE_ID) NO_OF_CYCLES,
+(TO_CHAR(ADD_MONTHS(AC.CS_APPRV_REJ_DT, -3), 'YYYY')) || '-' ||
+(TO_CHAR(ADD_MONTHS(AC.CS_APPRV_REJ_DT, -3), 'YYYY') + 1) FY,
+TO_CHAR(AC.CS_APPRV_REJ_DT, 'MON') MON,
+TO_CHAR(AC.CS_APPRV_REJ_DT, 'MM') MM
+FROM ASRIT_CASE AC,
+ASRIT_CASE_SURGERY ACS,
+ASRIT_PATIENT AP,
+ASRIM_HOSPITALS AH,
+ASRIM_DIST_SEQ ADS1,
+ASRIM_DIST_SEQ ADS2,
+ASRIM_SURGERY AS1,
+ASRIT_CASE_CLAIM ACC
+WHERE AC.CASE_ID = ACS.CASE_ID
+AND AC.CASE_PATIENT_NO = AP.PATIENT_ID
+AND AC.CASE_HOSP_CODE = AH.HOSP_ID
+AND AH.DIST_ID = ADS1.DIST_ID
+AND AP.DISTRICT_CODE = ADS2.DIST_ID
+AND ACS.SURGERY_CODE = AS1.SURGERY_ID
+AND AC.CASE_ID = ACC.CASE_ID
+AND AC.CS_DIS_MAIN_CODE = 'M6'
+AND ACS.SURGERY_CODE = 'M6.5'
+AND AC.PHASE_ID = '7'
+AND AS1.STATE_FLAG <> 'AP'
+AND AC.CS_APPRV_REJ_DT BETWEEN
+    TO_DATE('01/04/2024 00:00:00', 'DD/MM/YYYY HH24:MI:SS') AND
+    TO_DATE('31/03/2025 23:59:59', 'DD/MM/YYYY HH24:MI:SS');""",
+    },
 ]
 

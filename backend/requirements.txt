@@ -4,3 +4,5 @@ python-dotenv==1.0.0
 pydantic
 uvicorn==0.30.1
 oracledb
+reportlab==4.0.7
+pandas

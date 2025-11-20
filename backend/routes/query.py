@@ -9,18 +9,18 @@ import traceback
 
 # Handle both relative and absolute imports
 try:
-    from ..models import GenerateSQLRequest, GenerateSQLResponse, ExecuteQueryRequest, ExecuteQueryResponse
+    from ..models import GenerateSQLRequest, GenerateSQLResponse, ExecuteQueryRequest, ExecuteQueryResponse, GeneratePDFRequest, GeneratePDFResponse
     from ..config import get_gemini_api_key, FEW_SHOT_EXAMPLES
     from ..utils.validation import validate_sql
 except ImportError:
     # When running as script, try different import paths
     try:
-        from backend.models import GenerateSQLRequest, GenerateSQLResponse, ExecuteQueryRequest, ExecuteQueryResponse
+        from backend.models import GenerateSQLRequest, GenerateSQLResponse, ExecuteQueryRequest, ExecuteQueryResponse, GeneratePDFRequest, GeneratePDFResponse
         from backend.config import get_gemini_api_key, FEW_SHOT_EXAMPLES
         from backend.utils.validation import validate_sql
     except ImportError:
         # When running from backend directory directly
-        from models import GenerateSQLRequest, GenerateSQLResponse, ExecuteQueryRequest, ExecuteQueryResponse
+        from models import GenerateSQLRequest, GenerateSQLResponse, ExecuteQueryRequest, ExecuteQueryResponse, GeneratePDFRequest, GeneratePDFResponse
         from config import get_gemini_api_key, FEW_SHOT_EXAMPLES
         from utils.validation import validate_sql
 
@@ -205,6 +205,80 @@ async def execute_query(request: ExecuteQueryRequest):
     except Exception as e:
         logger.error(f"[API] execute-query: Error - {str(e)}")
         logger.error(f"[API] execute-query: Full traceback: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Internal server error: {str(e)}"
+        )
+
+
+@router.post("/generate-pdf", response_model=GeneratePDFResponse)
+async def generate_pdf(request: GeneratePDFRequest):
+    """
+    Generate PDF report from CSV data.
+    
+    Request body:
+    - csv_data: CSV data as string
+    - title: Report title (optional, defaults to "Data Report")
+    - report_description: Optional description of the report
+    
+    Response:
+    - pdf_data: PDF file as base64 encoded string
+    - file_name: Suggested file name for the PDF
+    - status: Success or error status
+    """
+    try:
+        logger.info(f"[API] generate-pdf: Generating PDF report with title '{request.title}'")
+        
+        # Import PDF generator
+        try:
+            from ..reports.pdf_generator import PDFReportGenerator
+        except ImportError:
+            try:
+                from backend.reports.pdf_generator import PDFReportGenerator
+            except ImportError:
+                try:
+                    from reports.pdf_generator import PDFReportGenerator
+                except ImportError:
+                    # Last resort - direct import
+                    import sys
+                    from pathlib import Path
+                    backend_path = Path(__file__).resolve().parent.parent
+                    if str(backend_path) not in sys.path:
+                        sys.path.insert(0, str(backend_path))
+                    from reports.pdf_generator import PDFReportGenerator
+        
+        # Generate PDF
+        pdf_generator = PDFReportGenerator()
+        pdf_bytes = pdf_generator.generate_pdf_from_csv(
+            csv_data=request.csv_data,
+            title=request.title,
+            report_description=request.report_description
+        )
+        
+        # Encode PDF to base64
+        import base64
+        pdf_base64 = base64.b64encode(pdf_bytes).decode('utf-8')
+        
+        # Generate file name
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_title = "".join(c for c in request.title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        safe_title = safe_title.replace(' ', '_')[:50]  # Limit length
+        file_name = f"{safe_title}_{timestamp}.pdf" if safe_title else f"report_{timestamp}.pdf"
+        
+        logger.info(f"[API] generate-pdf: Successfully generated PDF: {file_name}")
+        
+        return GeneratePDFResponse(
+            pdf_data=pdf_base64,
+            file_name=file_name,
+            status="success"
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"[API] generate-pdf: Error - {str(e)}")
+        logger.error(f"[API] generate-pdf: Full traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=500,
             detail=f"Internal server error: {str(e)}"

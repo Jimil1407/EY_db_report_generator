@@ -30,3 +30,15 @@ class ExecuteQueryResponse(BaseModel):
     error: Optional[str] = Field(None)
     status: str = Field(...)
 
+
+class GeneratePDFRequest(BaseModel):
+    csv_data: str = Field(..., description="CSV data as string")
+    title: str = Field(default="Data Report", description="Report title")
+    report_description: Optional[str] = Field(None, description="Optional report description")
+
+
+class GeneratePDFResponse(BaseModel):
+    pdf_data: str = Field(..., description="PDF file as base64 encoded string")
+    file_name: str = Field(..., description="Suggested file name for the PDF")
+    status: str = Field(...)
+
