@@ -6,9 +6,11 @@ __pycache__/
 # Virtual environments
 venv/
 .env/
+.venv/
 
 # Environment variables
 .env
+.venv
 .env.local
 # Recursive env files in any subdir (backend/, frontend/, etc.)
 **/.env
